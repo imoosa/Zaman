@@ -1,14 +1,15 @@
 :root {
-  --bohra-red: #254a45;   /* was maroon, now brand teal from logo */
-  --gold: #bf9051;        /* brand gold from logo */
-  --bohra-red-dark: #1b3733; /* hover/active shade */
+  --bohra-red: #1E4F7A;   /* Zaman brand Primary */
+  --secondary: #3AA7A0;   /* Zaman brand Secondary */
+  --gold: #D4B483;        /* Zaman brand Accent */
+  --bohra-red-dark: #163D5C; /* hover/active shade of Primary */
   --ink: #1f2430;
-  --ink-soft: #5b6270;
+  --ink-soft: #465563;    /* Zaman brand Text/Slate */
   --line: #e3e6ec;
-  --bg: #fbf3ec;          /* cream from logo background */
+  --bg: #FAF8F4;          /* Zaman brand Background */
   --panel: #ffffff;
-  --today-bg: #f3e6cf;   /* warm gold-tinted highlight */
-  --hover: #eee4d6;
+  --today-bg: #D7E8E5;   /* Zaman brand Soft Accent */
+  --hover: #D7E8E5;       /* Zaman brand Soft Accent */
 
   --c-christian: #4b7bec;
   --c-french: #2c3e50;
@@ -415,35 +416,46 @@ form button:hover { opacity: 0.9; }
   }
   .pill-more { display: none; }
 
-  .topbar { gap: 10px; padding: 0 12px; position: relative; }
+  /* Topbar becomes two rows on mobile: brand row on top, then the full
+     nav wraps onto its own row underneath -- no hamburger, everything is
+     visible and tappable straight away. */
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 6px 10px;
+    padding: 10px 12px;
+    position: relative;
+  }
   .brand { font-size: 0.92rem; }
   .brand-icon { height: 34px; }
 
-  .menu-toggle-label { display: flex; }
-  .menu-toggle-checkbox:checked ~ .menu-toggle-label span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
-  .menu-toggle-checkbox:checked ~ .menu-toggle-label span:nth-child(2) { opacity: 0; }
-  .menu-toggle-checkbox:checked ~ .menu-toggle-label span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+  /* Hamburger removed entirely on mobile -- nav is always shown below. */
+  .menu-toggle-checkbox, .menu-toggle-label { display: none !important; }
+  .menu-brand { display: none !important; }
 
   .menu {
-    display: none;
-    flex-direction: column;
-    gap: 2px;
-    position: absolute;
-    top: 100%; left: 0; right: 0;
-    background: var(--panel);
-    border-bottom: 1px solid var(--line);
-    box-shadow: 0 8px 16px rgba(0,0,0,.08);
-    padding: 8px 12px 12px;
-    z-index: 30;
+    flex-basis: 100%;
+    order: 3;
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 6px;
+    position: static;
+    background: transparent;
+    box-shadow: none;
+    border-top: 1px solid var(--line);
+    padding: 8px 0 0;
+    margin: 0;
+    z-index: auto;
   }
-  .menu-toggle-checkbox:checked ~ .menu { display: flex; }
-  .menu a { padding: 10px 12px; font-size: 0.92rem; }
-  .menu-brand {
-    display: flex; align-items: center; gap: 8px;
-    font-weight: 700; font-size: 0.98rem; color: var(--bohra-red);
-    padding: 6px 12px 12px; border-bottom: 1px solid var(--line); margin-bottom: 6px;
+  .menu a {
+    padding: 7px 12px;
+    font-size: 0.85rem;
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    flex: 0 0 auto;
   }
-  .menu-brand .brand-icon { height: 30px; }
+  .menu a.active { border-color: var(--bohra-red); }
 
   .main-content { padding: 12px 12px; }
 }
