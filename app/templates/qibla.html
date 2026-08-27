@@ -56,51 +56,67 @@
         display: block;
     }
 
-    /* The Qibla marker is deliberately outside the rotating dial.
-       It stays visually locked to the screen and does not inherit sensor jitter. */
-    .qibla-screen-marker {
+    /* Qibla target rotates with the live phone heading.
+       It is independent of the compass dial so it can settle precisely on Qibla. */
+    .qibla-target {
         position: absolute;
-        left: -2px;
+        left: 50%;
         top: 50%;
-        transform: translateY(-50%);
-        display: flex;
-        align-items: center;
-        gap: 5px;
-        z-index: 5;
+        width: 92px;
+        height: 92px;
+        margin: -46px 0 0 -46px;
+        transform: rotate(0deg);
+        transform-origin: 50% 50%;
+        z-index: 8;
         pointer-events: none;
+        transition: transform 120ms ease-out;
     }
 
-    .qibla-screen-marker .arrow {
+    .qibla-target .target-arrow {
+        position: absolute;
+        left: 50%;
+        top: 2px;
+        transform: translateX(-50%);
         width: 0;
         height: 0;
-        border-top: 9px solid transparent;
-        border-bottom: 9px solid transparent;
-        border-left: 16px solid #20d8cd;
-        filter: drop-shadow(0 0 5px rgba(32,216,205,.45));
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-bottom: 30px solid #20d8cd;
+        filter: drop-shadow(0 0 6px rgba(32,216,205,.50));
     }
 
-    .qibla-screen-marker .kaaba {
-        width: 34px;
-        height: 34px;
+    .qibla-target .target-kaaba {
+        position: absolute;
+        left: 50%;
+        top: 30px;
+        transform: translateX(-50%);
+        width: 31px;
+        height: 31px;
         display: grid;
         place-items: center;
-        border-radius: 9px;
+        border-radius: 8px;
         background: #10181c;
-        border: 1px solid rgba(32,216,205,.45);
+        border: 2px solid #20d8cd;
         color: #20d8cd;
-        font-size: 18px;
-        box-shadow: 0 4px 12px rgba(0,0,0,.28);
+        font-size: 17px;
+        box-shadow: 0 4px 13px rgba(0,0,0,.32);
     }
 
-    .qibla-screen-marker .label {
+    .qibla-target .target-label {
         position: absolute;
-        top: 37px;
-        left: -1px;
+        left: 50%;
+        top: 65px;
+        transform: translateX(-50%);
         color: #20d8cd;
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 1px;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 1.2px;
         white-space: nowrap;
+        text-shadow: 0 1px 5px rgba(0,0,0,.7);
+    }
+
+    .qibla-target.qibla-aligned {
+        filter: drop-shadow(0 0 9px rgba(32,216,205,.65));
     }
 
     .bearing-panel {
@@ -289,10 +305,10 @@
                 <polygon points="150,27 143,42 157,42" fill="#20d8cd"/>
             </svg>
 
-            <div class="qibla-screen-marker" aria-label="Qibla">
-                <span class="arrow"></span>
-                <span class="kaaba">▣</span>
-                <span class="label">QIBLA</span>
+            <div id="qibla-target" class="qibla-target" aria-label="Qibla direction">
+                <span class="target-arrow"></span>
+                <span class="target-kaaba">▣</span>
+                <span class="target-label">QIBLA</span>
             </div>
         </div>
 
@@ -323,7 +339,7 @@
         </div>
 
         <p id="qibla-static-note" class="direction-hint">
-            The Qibla marker is locked to the screen. When live mode is enabled, only the compass dial moves.
+            The Qibla arrow rotates with your phone. When it points straight up, you are facing Qibla.
         </p>
 
         <a class="google-qibla"
@@ -338,6 +354,7 @@
 (function(){
     var BEARING = {{ bearing }};
     var dial = document.getElementById('qibla-dial');
+    var target = document.getElementById('qibla-target');
     var liveBtn = document.getElementById('qibla-live-btn');
     var liveStatus = document.getElementById('qibla-live-status');
     var staticNote = document.getElementById('qibla-static-note');
@@ -345,29 +362,33 @@
     var live = false;
     var sx = null, sy = null;
     var lastHeading = null;
-    var lastAppliedRotation = null;
+    var lastDialRotation = null;
+    var lastQiblaRotation = null;
+    var aligned = false;
 
     function norm(deg){
         return ((deg % 360) + 360) % 360;
     }
 
-    function angleDelta(a, b){
+    function delta(a, b){
         return ((a - b + 540) % 360) - 180;
     }
 
     /*
-     * Strong sensor filtering:
-     * - averages heading as sin/cos components
-     * - ignores tiny changes
-     * - caps each update so a noisy phone sensor cannot visibly jump the dial
+     * Stable compass:
+     * The Qibla pointer follows the phone continuously.
+     * The pointer becomes "locked" only when it reaches Qibla alignment;
+     * it does NOT become permanently fixed to the left side of the screen.
      */
-    var SMOOTHING = 0.06;
-    var DEAD_ZONE = 0.7;
-    var MAX_STEP = 3.0;
+    var SMOOTHING = 0.10;
+    var DEAD_ZONE = 0.35;
+    var MAX_STEP = 5.0;
+    var ALIGN_TOLERANCE = 3.0;
 
     function smooth(rawHeading){
         var rad = rawHeading * Math.PI / 180;
-        var nx = Math.sin(rad), ny = Math.cos(rad);
+        var nx = Math.sin(rad);
+        var ny = Math.cos(rad);
 
         if (sx === null) {
             sx = nx;
@@ -380,35 +401,49 @@
         return norm(Math.atan2(sx, sy) * 180 / Math.PI);
     }
 
-    function setDialRotation(rotation){
-        rotation = norm(rotation);
+    function applySmoothRotation(element, wanted, previousName){
+        wanted = norm(wanted);
+        var previous = previousName === 'dial' ? lastDialRotation : lastQiblaRotation;
 
-        if (lastAppliedRotation !== null) {
-            var delta = angleDelta(rotation, lastAppliedRotation);
+        if (previous !== null) {
+            var d = delta(wanted, previous);
 
-            if (Math.abs(delta) < DEAD_ZONE) return;
+            if (Math.abs(d) < DEAD_ZONE) {
+                return previous;
+            }
 
-            if (delta > MAX_STEP) delta = MAX_STEP;
-            if (delta < -MAX_STEP) delta = -MAX_STEP;
+            if (d > MAX_STEP) d = MAX_STEP;
+            if (d < -MAX_STEP) d = -MAX_STEP;
 
-            rotation = norm(lastAppliedRotation + delta);
+            wanted = norm(previous + d);
         }
 
-        lastAppliedRotation = rotation;
-        dial.setAttribute(
-            'transform',
-            'rotate(' + rotation.toFixed(2) + ' 150 150)'
-        );
+        if (previousName === 'dial') {
+            lastDialRotation = wanted;
+        } else {
+            lastQiblaRotation = wanted;
+        }
+
+        element.style.transform = 'rotate(' + wanted.toFixed(2) + 'deg)';
+        return wanted;
     }
 
     function resetToStatic(){
         dial.removeAttribute('transform');
+
+        if (target) {
+            target.style.transform = 'rotate(0deg)';
+            target.classList.remove('qibla-aligned');
+        }
+
         sx = sy = null;
         lastHeading = null;
-        lastAppliedRotation = null;
+        lastDialRotation = null;
+        lastQiblaRotation = null;
+        aligned = false;
     }
 
-    /* Draw 5-degree ticks once. They belong to the rotating compass face. */
+    /* Draw the 5-degree compass scale once. */
     (function drawTicks(){
         var ticks = document.getElementById('qibla-ticks');
         if (!ticks) return;
@@ -423,7 +458,11 @@
             var x2 = 150 + Math.sin(a) * outer;
             var y2 = 150 - Math.cos(a) * outer;
 
-            var line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            var line = document.createElementNS(
+                'http://www.w3.org/2000/svg',
+                'line'
+            );
+
             line.setAttribute('x1', x1.toFixed(2));
             line.setAttribute('y1', y1.toFixed(2));
             line.setAttribute('x2', x2.toFixed(2));
@@ -445,38 +484,92 @@
 
         var heading = smooth(norm(raw));
 
-        if (lastHeading !== null && Math.abs(angleDelta(heading, lastHeading)) < 0.25) {
+        if (lastHeading !== null &&
+            Math.abs(delta(heading, lastHeading)) < 0.15) {
             return;
         }
 
         lastHeading = heading;
 
-        /*
-         * Do NOT rotate a Qibla arrow independently.
-         * The screen-locked Qibla marker stays still while the compass
-         * card rotates underneath it.
-         */
-        setDialRotation(-heading);
+        /* Rotate the compass face so North tracks the phone. */
+        var dialRotation = applySmoothRotation(
+            dial,
+            -heading,
+            'dial'
+        );
 
-        liveStatus.textContent =
-            'Facing ' + heading.toFixed(0) + '° — rotate slowly until Qibla aligns with the marker.';
+        /*
+         * Qibla direction relative to the phone.
+         * Example: if Qibla is 270° and phone faces 250°,
+         * the Qibla pointer needs to point 20° clockwise from screen-up.
+         */
+        var qiblaRelative = delta(BEARING, heading);
+
+        /*
+         * Rotate the Qibla target continuously.
+         * When it reaches the correct direction, add a visual alignment
+         * state instead of freezing it permanently.
+         */
+        applySmoothRotation(
+            target,
+            qiblaRelative,
+            'qibla'
+        );
+
+        var error = Math.abs(qiblaRelative);
+
+        if (error <= ALIGN_TOLERANCE) {
+            if (!aligned) {
+                aligned = true;
+                target.classList.add('qibla-aligned');
+            }
+
+            liveStatus.textContent =
+                '✓ Qibla aligned — keep your phone steady.';
+        } else {
+            aligned = false;
+            target.classList.remove('qibla-aligned');
+
+            liveStatus.textContent =
+                'Facing ' + heading.toFixed(0) +
+                '° — follow the Qibla arrow.';
+        }
     };
 
     function startLive(){
         if (live) return;
 
-        window.addEventListener('deviceorientationabsolute', handler, true);
-        window.addEventListener('deviceorientation', handler, true);
+        window.addEventListener(
+            'deviceorientationabsolute',
+            handler,
+            true
+        );
+
+        window.addEventListener(
+            'deviceorientation',
+            handler,
+            true
+        );
 
         live = true;
         liveBtn.textContent = '⏸ Turn off';
         staticNote.style.display = 'none';
-        liveStatus.textContent = 'Live compass active — rotate slowly.';
+        liveStatus.textContent =
+            'Live compass active — rotate until the Qibla arrow points up.';
     }
 
     function stopLive(){
-        window.removeEventListener('deviceorientationabsolute', handler, true);
-        window.removeEventListener('deviceorientation', handler, true);
+        window.removeEventListener(
+            'deviceorientationabsolute',
+            handler,
+            true
+        );
+
+        window.removeEventListener(
+            'deviceorientation',
+            handler,
+            true
+        );
 
         live = false;
         liveBtn.textContent = '🧭 Turn on';
@@ -490,11 +583,13 @@
             if (state === 'granted') {
                 startLive();
             } else {
-                liveStatus.textContent = 'Compass access was not allowed. You can retry below.';
+                liveStatus.textContent =
+                    'Compass access was not allowed. You can retry below.';
             }
         }).catch(function(err){
             liveStatus.textContent =
-                'Compass access failed: ' + (err && err.message ? err.message : err);
+                'Compass access failed: ' +
+                (err && err.message ? err.message : err);
         });
     }
 
@@ -512,10 +607,6 @@
         }
     });
 
-    /*
-     * Static mode: absolutely no animation and no vibration.
-     * iOS requires a user gesture before sensor permission can be requested.
-     */
     (function autoInit(){
         if (typeof DeviceOrientationEvent === 'undefined') {
             return;
@@ -523,7 +614,8 @@
 
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             liveBtn.style.display = '';
-            liveStatus.textContent = 'Tap Turn on to enable the live compass.';
+            liveStatus.textContent =
+                'Tap Turn on to enable the live compass.';
             return;
         }
 
