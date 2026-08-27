@@ -69,7 +69,6 @@
         transform-origin: 50% 50%;
         z-index: 8;
         pointer-events: none;
-        transition: transform 120ms ease-out;
     }
 
     .qibla-target .target-arrow {
@@ -115,8 +114,23 @@
         text-shadow: 0 1px 5px rgba(0,0,0,.7);
     }
 
-    .qibla-target.qibla-aligned {
-        filter: drop-shadow(0 0 9px rgba(32,216,205,.65));
+    .qibla-target.qibla-locked .target-kaaba {
+        background: #16302c;
+        border-color: #6bffef;
+        box-shadow: 0 0 0 4px rgba(107,255,239,.20);
+    }
+
+    .qibla-target.qibla-locked .target-arrow {
+        border-bottom-color: #6bffef;
+    }
+
+    .qibla-target.qibla-locked {
+        animation: qibla-lock-pulse 1.6s ease-in-out infinite;
+    }
+
+    @keyframes qibla-lock-pulse {
+        0%, 100% { filter: drop-shadow(0 0 7px rgba(107,255,239,.55)); }
+        50%      { filter: drop-shadow(0 0 15px rgba(107,255,239,.9)); }
     }
 
     .bearing-panel {
@@ -234,7 +248,6 @@
         .qibla-page { padding-left: 8px; padding-right: 8px; }
         .qibla-head h1 { font-size: 24px; }
         .compass-wrap { width: min(92vw, 430px); }
-        .qibla-screen-marker { left: -4px; }
         .bearing-value { font-size: 30px; }
         .metric-value { font-size: 23px; }
         .live-row { align-items: flex-start; }
@@ -339,7 +352,7 @@
         </div>
 
         <p id="qibla-static-note" class="direction-hint">
-            The Qibla arrow rotates with your phone. When it points straight up, you are facing Qibla.
+            The Qibla arrow rotates with your phone. It locks and glows once you're facing Qibla.
         </p>
 
         <a class="google-qibla"
@@ -361,10 +374,17 @@
 
     var live = false;
     var sx = null, sy = null;
-    var lastHeading = null;
-    var lastDialRotation = null;
-    var lastQiblaRotation = null;
-    var aligned = false;
+    var locked = false;
+    var rafHandle = null;
+    var pendingHeading = null;
+
+    // Unwrapped rotation state per element. "normalized" stays in 0-360 so we
+    // can measure the shortest angular step; "unwrapped" grows/shrinks freely
+    // so the CSS transform never has to jump across the 0/360 boundary
+    // (that jump was the visible "spin/shake" — the browser has no idea
+    // 359deg -> 1deg is a 2deg move, it animates the long way around).
+    var dialState = { normalized: null, unwrapped: 0 };
+    var targetState = { normalized: null, unwrapped: 0 };
 
     function norm(deg){
         return ((deg % 360) + 360) % 360;
@@ -374,16 +394,16 @@
         return ((a - b + 540) % 360) - 180;
     }
 
-    /*
-     * Stable compass:
-     * The Qibla pointer follows the phone continuously.
-     * The pointer becomes "locked" only when it reaches Qibla alignment;
-     * it does NOT become permanently fixed to the left side of the screen.
-     */
-    var SMOOTHING = 0.10;
-    var DEAD_ZONE = 0.35;
-    var MAX_STEP = 5.0;
-    var ALIGN_TOLERANCE = 3.0;
+    /* Single low-pass filter on the compass heading itself (vector average).
+       No second degree-based clamp on top of this — stacking two filters
+       with different time constants is what produced the oscillation. */
+    var SMOOTHING = 0.15;
+
+    // Hysteresis lock: enter lock inside 3 deg, only release past 6 deg.
+    // Without this gap, sensor noise around a single threshold makes the
+    // arrow flicker in and out of "aligned" forever — never actually resting.
+    var LOCK_ENTER = 3.0;
+    var LOCK_EXIT = 6.0;
 
     function smooth(rawHeading){
         var rad = rawHeading * Math.PI / 180;
@@ -401,46 +421,49 @@
         return norm(Math.atan2(sx, sy) * 180 / Math.PI);
     }
 
-    function applySmoothRotation(element, wanted, previousName){
-        wanted = norm(wanted);
-        var previous = previousName === 'dial' ? lastDialRotation : lastQiblaRotation;
+    function setRotation(element, state, wantedDeg){
+        var wantedNorm = norm(wantedDeg);
 
-        if (previous !== null) {
-            var d = delta(wanted, previous);
-
-            if (Math.abs(d) < DEAD_ZONE) {
-                return previous;
-            }
-
-            if (d > MAX_STEP) d = MAX_STEP;
-            if (d < -MAX_STEP) d = -MAX_STEP;
-
-            wanted = norm(previous + d);
-        }
-
-        if (previousName === 'dial') {
-            lastDialRotation = wanted;
+        if (state.normalized === null) {
+            state.normalized = wantedNorm;
+            state.unwrapped = wantedNorm;
         } else {
-            lastQiblaRotation = wanted;
+            var d = delta(wantedNorm, state.normalized);
+            state.normalized = norm(state.normalized + d);
+            state.unwrapped += d;
         }
 
-        element.style.transform = 'rotate(' + wanted.toFixed(2) + 'deg)';
-        return wanted;
+        element.style.transform = 'rotate(' + state.unwrapped.toFixed(2) + 'deg)';
+    }
+
+    function snapLocked(){
+        // Pin exactly to "pointing up" and freeze — nearest multiple of 360
+        // to whatever the current unwrapped value is, so there's no visible
+        // jump when we snap.
+        targetState.unwrapped = Math.round(targetState.unwrapped / 360) * 360;
+        targetState.normalized = 0;
+        target.style.transform = 'rotate(' + targetState.unwrapped.toFixed(2) + 'deg)';
     }
 
     function resetToStatic(){
         dial.removeAttribute('transform');
+        dial.style.transform = '';
 
         if (target) {
             target.style.transform = 'rotate(0deg)';
-            target.classList.remove('qibla-aligned');
+            target.classList.remove('qibla-locked');
         }
 
         sx = sy = null;
-        lastHeading = null;
-        lastDialRotation = null;
-        lastQiblaRotation = null;
-        aligned = false;
+        locked = false;
+        dialState = { normalized: null, unwrapped: 0 };
+        targetState = { normalized: null, unwrapped: 0 };
+
+        if (rafHandle !== null) {
+            cancelAnimationFrame(rafHandle);
+            rafHandle = null;
+        }
+        pendingHeading = null;
     }
 
     /* Draw the 5-degree compass scale once. */
@@ -471,6 +494,51 @@
         }
     })();
 
+    function renderFrame(){
+        rafHandle = null;
+        if (pendingHeading === null) return;
+
+        var heading = pendingHeading;
+
+        /* Rotate the compass face so North tracks the phone. */
+        setRotation(dial, dialState, -heading);
+
+        /*
+         * Qibla direction relative to the phone.
+         * Example: if Qibla is 270° and phone faces 250°,
+         * the Qibla pointer needs to point 20° clockwise from screen-up.
+         */
+        var qiblaRelative = delta(BEARING, heading);
+        var error = Math.abs(qiblaRelative);
+
+        if (locked) {
+            if (error > LOCK_EXIT) {
+                locked = false;
+                target.classList.remove('qibla-locked');
+            } else {
+                // Stay frozen exactly on target — do not re-rotate on every
+                // tiny sensor wobble. This is the actual "lock".
+                liveStatus.textContent =
+                    '✓ Qibla locked — you are facing Mecca.';
+                return;
+            }
+        }
+
+        setRotation(target, targetState, qiblaRelative);
+
+        if (!locked && error <= LOCK_ENTER) {
+            locked = true;
+            target.classList.add('qibla-locked');
+            snapLocked();
+            liveStatus.textContent =
+                '✓ Qibla locked — you are facing Mecca.';
+        } else {
+            liveStatus.textContent =
+                'Facing ' + heading.toFixed(0) +
+                '° — rotate until the arrow locks.';
+        }
+    }
+
     var handler = function(e){
         var raw = null;
 
@@ -482,57 +550,15 @@
 
         if (raw === null || !isFinite(raw)) return;
 
-        var heading = smooth(norm(raw));
+        pendingHeading = smooth(norm(raw));
 
-        if (lastHeading !== null &&
-            Math.abs(delta(heading, lastHeading)) < 0.15) {
-            return;
-        }
-
-        lastHeading = heading;
-
-        /* Rotate the compass face so North tracks the phone. */
-        var dialRotation = applySmoothRotation(
-            dial,
-            -heading,
-            'dial'
-        );
-
-        /*
-         * Qibla direction relative to the phone.
-         * Example: if Qibla is 270° and phone faces 250°,
-         * the Qibla pointer needs to point 20° clockwise from screen-up.
-         */
-        var qiblaRelative = delta(BEARING, heading);
-
-        /*
-         * Rotate the Qibla target continuously.
-         * When it reaches the correct direction, add a visual alignment
-         * state instead of freezing it permanently.
-         */
-        applySmoothRotation(
-            target,
-            qiblaRelative,
-            'qibla'
-        );
-
-        var error = Math.abs(qiblaRelative);
-
-        if (error <= ALIGN_TOLERANCE) {
-            if (!aligned) {
-                aligned = true;
-                target.classList.add('qibla-aligned');
-            }
-
-            liveStatus.textContent =
-                '✓ Qibla aligned — keep your phone steady.';
-        } else {
-            aligned = false;
-            target.classList.remove('qibla-aligned');
-
-            liveStatus.textContent =
-                'Facing ' + heading.toFixed(0) +
-                '° — follow the Qibla arrow.';
+        // Batch to one DOM write per animation frame. Device orientation
+        // events can fire far faster than the screen refresh rate — writing
+        // a new transform on every single one is what caused overlapping,
+        // conflicting paint updates (visible as shake) on top of the
+        // 0/360 wrap bug.
+        if (rafHandle === null) {
+            rafHandle = requestAnimationFrame(renderFrame);
         }
     };
 
@@ -552,6 +578,7 @@
         );
 
         live = true;
+        liveBtn.style.display = '';
         liveBtn.textContent = '⏸ Turn off';
         staticNote.style.display = 'none';
         liveStatus.textContent =
