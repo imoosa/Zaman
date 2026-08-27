@@ -1,4 +1,8 @@
 flask
 flask-cors
 sqlalchemy
-gunicorn 
+gunicorn
+convertdate
+prayer-times-calculator
+timezonefinder
+pyswisseph
