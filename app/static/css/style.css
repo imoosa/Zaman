@@ -86,9 +86,14 @@ body {
   border-radius: 8px;
   font-size: 0.9rem;
   transition: background .15s, color .15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 .menu a:hover { background: var(--hover); color: var(--ink); }
 .menu a.active { background: var(--bohra-red); color: #fff; }
+.menu a .nav-icon { display: none; }
+.menu a .nav-label { display: inline; }
 
 .menu-toggle-checkbox { display: none; }
 .menu-toggle-label {
@@ -416,46 +421,68 @@ form button:hover { opacity: 0.9; }
   }
   .pill-more { display: none; }
 
-  /* Topbar becomes two rows on mobile: brand row on top, then the full
-     nav wraps onto its own row underneath -- no hamburger, everything is
-     visible and tappable straight away. */
+  /* Topbar stays a single row on mobile -- nav is no longer part of it;
+     it's a fixed bottom tab bar instead (see .menu below). */
   .topbar {
-    flex-wrap: wrap;
     height: auto;
-    gap: 6px 10px;
+    gap: 10px;
     padding: 10px 12px;
     position: relative;
   }
   .brand { font-size: 0.92rem; }
   .brand-icon { height: 34px; }
 
-  /* Hamburger removed entirely on mobile -- nav is always shown below. */
+  /* Hamburger removed entirely -- nav is always visible as a bottom bar. */
   .menu-toggle-checkbox, .menu-toggle-label { display: none !important; }
   .menu-brand { display: none !important; }
 
+  /* Bottom tab bar: icon on top, label underneath, tabs evenly spaced,
+     fixed to the bottom of the screen -- like a native app's bottom nav. */
   .menu {
-    flex-basis: 100%;
-    order: 3;
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
     display: flex;
-    flex-direction: row;
-    flex-wrap: wrap;
-    gap: 6px;
-    position: static;
-    background: transparent;
-    box-shadow: none;
+    flex-wrap: nowrap;
+    gap: 0;
+    background: var(--panel);
     border-top: 1px solid var(--line);
-    padding: 8px 0 0;
-    margin: 0;
-    z-index: auto;
+    box-shadow: 0 -2px 10px rgba(0,0,0,.06);
+    padding: 6px 2px calc(6px + env(safe-area-inset-bottom));
+    z-index: 40;
+    border-radius: 0;
   }
   .menu a {
-    padding: 7px 12px;
-    font-size: 0.85rem;
-    border: 1px solid var(--line);
-    border-radius: 20px;
-    flex: 0 0 auto;
+    flex: 1 1 0;
+    min-width: 0;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 4px 2px;
+    border-radius: 8px;
+    font-size: 10px;
+    line-height: 1.15;
+    color: var(--ink-soft);
+    text-align: center;
   }
-  .menu a.active { border-color: var(--bohra-red); }
+  .menu a:hover { background: none; }
+  .menu a.active { background: none; color: var(--bohra-red); font-weight: 600; }
+  .menu a .nav-icon {
+    display: block;
+    width: 21px;
+    height: 21px;
+    flex-shrink: 0;
+  }
+  .menu a .nav-label {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
 
-  .main-content { padding: 12px 12px; }
+  /* Room at the bottom of the page so content doesn't sit under the
+     fixed tab bar, and lift the sticky note above it too. */
+  .main-content { padding: 12px 12px calc(72px + env(safe-area-inset-bottom)); }
+  .notes-widget { bottom: calc(16px + 64px + env(safe-area-inset-bottom)); }
 }
