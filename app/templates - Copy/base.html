@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Bohra Hijri Calendar{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Liturgical Theme Engine -- today's Christian liturgical season sets
+           this accent, used as a thin app-wide highlight (topbar underline +
+           a small badge) rather than overriding the app's core Bohra maroon
+           branding wholesale. */
+        :root{ --liturgical-accent: {{ liturgical_color_hex }}; }
+        .topbar{ border-bottom: 3px solid var(--liturgical-accent); }
+        .liturgical-badge{
+            display:inline-flex; align-items:center; gap:5px; font-size:11px;
+            color:#666; margin-left:10px; padding:2px 8px; border-radius:10px;
+            background:color-mix(in srgb, var(--liturgical-accent) 12%, transparent);
+        }
+        .liturgical-badge .dot{
+            width:8px; height:8px; border-radius:50%; background:var(--liturgical-accent);
+            display:inline-block;
+        }
+    </style>
+</head>
+<body>
+    <header class="topbar">
+        <div class="brand">Bohra Calendar</div>
+        <span class="liturgical-badge" title="Christian liturgical season, sets today's accent color"><span class="dot"></span>{{ liturgical_season_name }}</span>
+        <input type="checkbox" id="menu-toggle" class="menu-toggle-checkbox">
+        <label for="menu-toggle" class="menu-toggle-label" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </label>
+        <nav class="menu">
+            <a href="{{ url_for('calendar_view') }}" class="{{ 'active' if active == 'calendar' else '' }}">Calendar</a>
+            <a href="{{ url_for('prayer_view') }}" class="{{ 'active' if active == 'prayer' else '' }}">Prayer Times</a>
+            <a href="{{ url_for('events_view') }}" class="{{ 'active' if active == 'events' else '' }}">Events</a>
+            <a href="{{ url_for('vastu_view') }}" class="{{ 'active' if active == 'vastu' else '' }}">Vastu</a>
+            <a href="{{ url_for('settings_view') }}" class="{{ 'active' if active == 'settings' else '' }}">Settings</a>
+        </nav>
+    </header>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for m in messages %}
+        <div class="flash">{{ m }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <style>
+        /* Sidebar column removed -- main-content now has the full width
+           to itself. [guessing] mechanism: this overrides whatever
+           style.css sets via source order (this tag renders after the
+           linked stylesheet). I don't have style.css, so if layout still
+           looks off after this, that file may need a matching edit --
+           send it over and I'll match the real mechanism. */
+        .main-content{ width: 100%; max-width: none; }
+
+        /* Notes widget -- now a single floating card on every page instead
+           of living inside the old collapsible sidebar. It's fixed to the
+           viewport and draggable everywhere, not just on mobile, so there's
+           exactly one notes surface in the whole app (the toolbar "Note"
+           button on calendar.html just calls openStickyNote() below to
+           reopen this same card -- no second note system anymore). */
+        .notes-widget{
+            position:fixed;
+            right:16px; bottom:16px;
+            z-index:60; /* stays under calendar.html's modal-overlay (z-index:100) so Add Event still covers it */
+            width:230px;
+        }
+
+        .sticky-note-card{
+            background:#fff8d6;border-radius:8px;
+            box-shadow:0 4px 14px rgba(0,0,0,.16);
+            overflow:hidden;display:flex;flex-direction:column;
+        }
+        .notes-header{
+            display:flex;align-items:center;justify-content:space-between;
+            padding:6px 8px;
+            cursor:grab;
+            touch-action:none; /* stops the page from scrolling under your finger while dragging the header */
+        }
+        .notes-header:active{cursor:grabbing;}
+        .notes-drag-dots{color:#00000045;font-size:13px;letter-spacing:2px;user-select:none;}
+        .notes-header-actions{display:flex;gap:2px;}
+        .notes-icon-btn{
+            border:none;background:none;cursor:pointer;color:#4a4326;
+            width:24px;height:24px;border-radius:4px;font-size:13px;
+            display:inline-flex;align-items:center;justify-content:center;padding:0;
+        }
+        .notes-icon-btn:hover{background:#00000012;}
+        /* Only "..." is still disabled -- there's genuinely nothing to put
+           in that menu yet. "+" now does something real (see JS). */
+        .notes-icon-btn:disabled{opacity:.4;cursor:default;}
+        .notes-icon-btn:disabled:hover{background:none;}
+
+        .notes-toolbar{display:flex;align-items:center;gap:2px;
+            padding:6px 8px;border-top:1px solid rgba(0,0,0,.08);}
+        .notes-toolbar button#note-bold-btn{font-weight:700;}
+        .notes-toolbar button#note-italic-btn{font-style:italic;}
+        .notes-toolbar button#note-underline-btn{text-decoration:underline;}
+        .note-save-status{margin-left:auto;font-size:11px;color:#8a8360;}
+
+        .sticky-note{min-height:150px;background:transparent;
+            box-shadow:none;padding:4px 14px 10px;font-size:13.5px;
+            line-height:1.55;outline:none;white-space:pre-wrap;}
+        .sticky-note:empty::before{content:attr(data-placeholder);color:#a89a5c;}
+        .sticky-note ul,.sticky-note ol{margin:4px 0 4px 18px;padding:0;}
+
+        /* Collapsed -- hides body + toolbar, leaves the header bar as a
+           thin strip. */
+        .sticky-note-card.collapsed .sticky-note,
+        .sticky-note-card.collapsed .notes-toolbar{
+            display:none;
+        }
+
+        /* Reopen pill shown only when the card has been closed via the X --
+           without this, closing the note would be a one-way trip with no
+           way back short of clearing localStorage. */
+        .note-reopen-btn{position:fixed;right:16px;bottom:16px;z-index:60;
+            border:1px dashed #ccc;background:#fff;
+            border-radius:6px;padding:6px 10px;font-size:12px;color:#777;cursor:pointer;
+            display:none;}
+        .note-reopen-btn:hover{background:#f4f1ea;}
+    </style>
+
+    <div class="app-body">
+        <main class="main-content">
+            {% block content %}{% endblock %}
+        </main>
+
+        <div class="notes-widget">
+            <div class="sticky-note-card">
+                <div class="notes-header">
+                    <span class="notes-drag-dots" title="Drag to move">::::</span>
+                    <div class="notes-header-actions">
+                        <button type="button" id="note-collapse-btn" class="notes-icon-btn" title="Collapse/expand">&minus;</button>
+                        <button type="button" id="note-new-btn" class="notes-icon-btn" title="Clear this note and start fresh">+</button>
+                        <button type="button" class="notes-icon-btn" title="Nothing to put in this menu yet" disabled>&#8942;</button>
+                        <button type="button" id="note-close-btn" class="notes-icon-btn" title="Hide">&times;</button>
+                    </div>
+                </div>
+
+                <div id="sticky-note" class="sticky-note" contenteditable="true"
+                     data-placeholder="Write something important&hellip;">{{ sidebar_note_content|safe }}</div>
+
+                <div class="notes-toolbar">
+                    <button type="button" id="note-bold-btn" class="notes-icon-btn" title="Bold the selected text">B</button>
+                    <button type="button" id="note-italic-btn" class="notes-icon-btn" title="Italic the selected text">I</button>
+                    <button type="button" id="note-underline-btn" class="notes-icon-btn" title="Underline the selected text">U</button>
+                    <button type="button" id="note-bullet-btn" class="notes-icon-btn" title="Bullet list">&#9776;</button>
+                    <button type="button" id="note-number-btn" class="notes-icon-btn" title="Numbered list">1.</button>
+                    <button type="button" id="note-image-btn" class="notes-icon-btn"
+                            title="Not wired to a backend yet -- see the sanitizer note below">&#128247;</button>
+                    <span id="note-save-status" class="note-save-status"></span>
+                </div>
+            </div>
+            <button type="button" id="note-reopen-btn" class="note-reopen-btn">+ Note</button>
+        </div>
+    </div>
+
+    <script>
+    (function(){
+        var note = document.getElementById('sticky-note');
+        var status = document.getElementById('note-save-status');
+        var saveTimer = null;
+
+        function saveNote(){
+            status.textContent = 'Saving…';
+            fetch('{{ url_for("save_note") }}', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'content=' + encodeURIComponent(note.innerHTML)
+            }).then(function(r){
+                status.textContent = r.ok ? 'Saved' : 'Could not save';
+                setTimeout(function(){ status.textContent = ''; }, 1500);
+            }).catch(function(){
+                status.textContent = 'Could not save';
+            });
+        }
+
+        note.addEventListener('input', function(){
+            clearTimeout(saveTimer);
+            status.textContent = '';
+            saveTimer = setTimeout(saveNote, 800);
+        });
+        note.addEventListener('blur', saveNote);
+
+        // execCommand is deprecated but still the simplest way to get basic
+        // rich-text toggling in a contenteditable box without pulling in a
+        // whole editor library -- fine for five buttons.
+        function bindCmd(id, cmd){
+            document.getElementById(id).addEventListener('click', function(){
+                document.execCommand(cmd);
+                note.focus();
+            });
+        }
+        bindCmd('note-bold-btn', 'bold');
+        bindCmd('note-italic-btn', 'italic');
+        bindCmd('note-underline-btn', 'underline');
+        bindCmd('note-bullet-btn', 'insertUnorderedList');
+        bindCmd('note-number-btn', 'insertOrderedList');
+
+        // Close/reopen -- persisted so an accidental close doesn't feel
+        // like the note vanished. Card and pill states are always kept
+        // as exact opposites of each other.
+        var widget = document.querySelector('.notes-widget');
+        var card = document.querySelector('.sticky-note-card');
+        var header = document.querySelector('.notes-header');
+        var reopenBtn = document.getElementById('note-reopen-btn');
+        var HIDE_KEY = 'sticky-note-hidden';
+        function setHidden(hidden){
+            card.style.display = hidden ? 'none' : '';
+            reopenBtn.style.display = hidden ? 'inline-block' : 'none';
+            localStorage.setItem(HIDE_KEY, hidden ? '1' : '0');
+        }
+        document.getElementById('note-close-btn').addEventListener('click', function(){ setHidden(true); });
+        reopenBtn.addEventListener('click', function(){ setHidden(false); });
+        setHidden(localStorage.getItem(HIDE_KEY) === '1');
+
+        // Single entry point for reopening the note from anywhere else in
+        // the app -- e.g. calendar.html's toolbar "Note" button.
+        window.openStickyNote = function(){ setHidden(false); note.focus(); };
+
+        // "+" -- there's only one note slot (see database.py's Note model),
+        // so this can't create a second note. What it CAN honestly do is
+        // clear the current one so you're starting fresh, same as opening
+        // a blank Windows sticky note -- with a confirm so a stray tap
+        // doesn't wipe something you meant to keep.
+        document.getElementById('note-new-btn').addEventListener('click', function(){
+            if (note.textContent.trim() === '' || confirm('Clear the current note and start a new one?')) {
+                note.innerHTML = '';
+                note.focus();
+                saveNote();
+            }
+        });
+
+        // Collapse -- shrinks the card to just its header bar. Works on
+        // any screen size, not only mobile; nothing stops you from using
+        // it on desktop too.
+        var COLLAPSE_KEY = 'sticky-note-collapsed';
+        var collapseBtn = document.getElementById('note-collapse-btn');
+        function setCollapsed(collapsed){
+            card.classList.toggle('collapsed', collapsed);
+            collapseBtn.innerHTML = collapsed ? '&#9633;' : '&minus;';
+            collapseBtn.title = collapsed ? 'Expand' : 'Collapse';
+            localStorage.setItem(COLLAPSE_KEY, collapsed ? '1' : '0');
+        }
+        collapseBtn.addEventListener('click', function(){
+            setCollapsed(!card.classList.contains('collapsed'));
+        });
+        setCollapsed(localStorage.getItem(COLLAPSE_KEY) === '1');
+
+        // Deliberately NOT wired to insertImage/execCommand -- that would
+        // embed a base64 data: URI, and _NOTE_ALLOWED_TAGS in main.py has
+        // no img entry, so sanitize_note_html would strip it back out on
+        // the very next save. Shipping a button that silently loses your
+        // image is worse than no button, so this says so instead.
+        document.getElementById('note-image-btn').addEventListener('click', function(){
+            alert('Image notes need a small backend change first (main.py: add "img" to _NOTE_ALLOWED_TAGS, plus an upload endpoint). Not done yet -- ask if you want that built.');
+        });
+
+        // Drag the card around on any screen size, position persisted.
+        var POS_KEY = 'sticky-note-pos';
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(POS_KEY) || 'null'); } catch(e){}
+        if (saved && typeof saved.left === 'number' && typeof saved.top === 'number'){
+            widget.style.left = saved.left + 'px';
+            widget.style.top = saved.top + 'px';
+            widget.style.right = widget.style.bottom = '';
+        }
+
+        var dragging = false, startX, startY, startLeft, startTop;
+        header.addEventListener('pointerdown', function(e){
+            if (e.target.closest('button')) return; // header buttons still need to be tappable, not drag starters
+            dragging = true;
+            header.setPointerCapture(e.pointerId);
+            var rect = widget.getBoundingClientRect();
+            startX = e.clientX; startY = e.clientY;
+            startLeft = rect.left; startTop = rect.top;
+            widget.style.right = widget.style.bottom = '';
+        });
+        header.addEventListener('pointermove', function(e){
+            if (!dragging) return;
+            var left = startLeft + (e.clientX - startX);
+            var top = startTop + (e.clientY - startY);
+            left = Math.max(0, Math.min(window.innerWidth - widget.offsetWidth, left));
+            top = Math.max(0, Math.min(window.innerHeight - widget.offsetHeight, top));
+            widget.style.left = left + 'px';
+            widget.style.top = top + 'px';
+        });
+        function endDrag(){
+            if (!dragging) return;
+            dragging = false;
+            localStorage.setItem(POS_KEY, JSON.stringify({
+                left: parseInt(widget.style.left, 10),
+                top: parseInt(widget.style.top, 10)
+            }));
+        }
+        header.addEventListener('pointerup', endDrag);
+        header.addEventListener('pointercancel', endDrag);
+    })();
+    </script>
+</body>
+</html>

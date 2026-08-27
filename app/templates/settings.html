@@ -1,0 +1,595 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<style>
+  :root{
+    --bohra:#254a45;
+    --sunni:#1d6fa5;
+    --shia:#7c3aed;
+    --christian:#2b6cb0;
+    --jewish:#8e44ad;
+    --hindu:#e67e22;
+    --parsi:#16a085;
+    --french:#2c3e50;
+    --personal:#1f9d55;
+    --ink:#1f1f1f;
+    --muted:#6b6b6b;
+    --line:#e7e3dd;
+  }
+
+  .settings-section{
+    border:1px solid var(--line);border-radius:12px;background:#fff;
+    padding:20px 22px;margin-bottom:18px;
+  }
+  .settings-section h2{font-size:15px;margin:0 0 4px;color:var(--ink)}
+  .settings-section .section-hint{font-size:12.5px;color:var(--muted);margin:0 0 16px;line-height:1.5}
+
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  @media (max-width:560px){.field-grid{grid-template-columns:1fr}}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:12.5px;font-weight:600;color:var(--ink)}
+  .field select, .field input[type="text"], .field input[type="number"]{
+    border:1px solid var(--line);border-radius:8px;padding:9px 10px;font-size:13.5px;
+    font-family:inherit;color:var(--ink);background:#fff;
+  }
+  .field select:focus, .field input:focus{outline:2px solid var(--bohra);outline-offset:1px}
+
+  /* Event visibility -- grouped toggle switches instead of a bare checkbox grid */
+  .visibility-group{margin-bottom:18px}
+  .visibility-group:last-child{margin-bottom:0}
+  .visibility-group h3{
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;
+    color:var(--muted);margin:0 0 8px;font-weight:700;
+  }
+  .toggle-row{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:10px 4px;border-bottom:1px solid var(--line);
+  }
+  .toggle-row:last-child{border-bottom:none}
+  .toggle-label{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--ink)}
+  .toggle-dot{width:10px;height:10px;border-radius:50%;flex:none}
+  .dot-bohra{background:var(--bohra)}
+  .dot-sunni{background:var(--sunni)}
+  .dot-shia{background:var(--shia)}
+  .dot-christian{background:var(--christian)}
+  .dot-jewish{background:var(--jewish)}
+  .dot-hindu{background:var(--hindu)}
+  .dot-parsi{background:var(--parsi)}
+  .dot-french{background:var(--french)}
+  .dot-personal{background:var(--personal)}
+
+  /* Switch control */
+  .switch{position:relative;display:inline-block;width:38px;height:22px;flex:none}
+  .switch input{opacity:0;width:0;height:0}
+  .switch .slider{
+    position:absolute;cursor:pointer;inset:0;background:#ddd8cf;border-radius:22px;
+    transition:background .15s ease;
+  }
+  .switch .slider::before{
+    content:"";position:absolute;height:16px;width:16px;left:3px;top:3px;
+    background:#fff;border-radius:50%;transition:transform .15s ease;
+    box-shadow:0 1px 2px rgba(0,0,0,.25);
+  }
+  .switch input:checked + .slider{background:var(--bohra)}
+  .switch input:checked + .slider::before{transform:translateX(16px)}
+  .switch input:focus-visible + .slider{outline:2px solid var(--bohra);outline-offset:2px}
+
+  .location-btn-row{margin-bottom:14px}
+  .use-location-btn{
+    display:inline-flex;align-items:center;gap:6px;font-size:0.9rem;text-decoration:none;
+    border:1px solid var(--line);padding:8px 14px;border-radius:8px;color:var(--ink);
+    background:#fff;cursor:pointer;
+  }
+  .use-location-btn:hover{border-color:var(--bohra)}
+  .lookup-row{display:flex;gap:8px;align-items:flex-start}
+  .lookup-row input{flex:1}
+  .lookup-btn{
+    flex:0 0 auto;background:none;border:1px solid var(--line);border-radius:8px;padding:9px 14px;
+    font-size:0.85rem;cursor:pointer;color:var(--ink);white-space:nowrap;
+  }
+  .lookup-btn:hover{border-color:var(--bohra)}
+
+  .settings-actions{display:flex;gap:12px;margin-top:4px}
+  .btn-save{
+    background:var(--bohra);color:#fff;border:none;padding:10px 24px;border-radius:8px;
+    font-size:14px;font-weight:600;cursor:pointer;
+  }
+  .btn-save:hover{opacity:.92}
+  .btn-cancel{
+    background:#f4f1ea;color:#555;border:none;padding:10px 24px;border-radius:8px;
+    font-size:14px;cursor:pointer;
+  }
+
+  .ringtone-preview-btn{
+    border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--bohra);
+    width:38px;flex:none;font-size:13px;cursor:pointer;
+  }
+  .ringtone-preview-btn:hover{background:#faf8f4}
+  .ringtone-upload-card{
+    margin-top:18px;padding:14px 16px;border:1px dashed var(--line);border-radius:10px;background:#faf8f4;
+  }
+  .ringtone-upload-list{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+  .ringtone-upload-row{
+    display:flex;align-items:center;justify-content:space-between;font-size:13px;
+    padding:7px 10px;background:#fff;border:1px solid var(--line);border-radius:6px;
+  }
+</style>
+
+<div class="card">
+    <h1>Settings</h1>
+
+    <form method="post">
+
+        <div class="settings-section">
+            <h2>Calendars</h2>
+            <p class="section-hint">Choose the calendar you see by default, and optionally a second one to show alongside it.</p>
+            <div class="field-grid">
+                <div class="field">
+                    <label for="f-default-cal">Default calendar</label>
+                    <select name="default_calendar" id="f-default-cal">
+                        <option value="hijri" {{ 'selected' if prefs.default_calendar == 'hijri' else '' }}>Bohra (Fatimid) Hijri</option>
+                        <option value="sunni" {{ 'selected' if prefs.default_calendar == 'sunni' else '' }}>Sunni (Umm al-Qura) Hijri</option>
+                        <option value="shia" {{ 'selected' if prefs.default_calendar == 'shia' else '' }}>Shia (Jafari) Hijri</option>
+                        <option value="gregorian" {{ 'selected' if prefs.default_calendar == 'gregorian' else '' }}>Gregorian</option>
+                        <option value="hebrew" {{ 'selected' if prefs.default_calendar == 'hebrew' else '' }}>Hebrew</option>
+                        <option value="parsi" {{ 'selected' if prefs.default_calendar == 'parsi' else '' }}>Parsi (Shahenshahi)</option>
+                        <option value="hindu" {{ 'selected' if prefs.default_calendar == 'hindu' else '' }}>Hindu (Lunar)</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="f-secondary-cal">Secondary calendar</label>
+                    <select name="secondary_calendar" id="f-secondary-cal">
+                        <option value="">None</option>
+                        <option value="hijri" {{ 'selected' if prefs.secondary_calendar == 'hijri' else '' }}>Bohra (Fatimid) Hijri</option>
+                        <option value="sunni" {{ 'selected' if prefs.secondary_calendar == 'sunni' else '' }}>Sunni (Umm al-Qura) Hijri</option>
+                        <option value="shia" {{ 'selected' if prefs.secondary_calendar == 'shia' else '' }}>Shia (Jafari) Hijri</option>
+                        <option value="gregorian" {{ 'selected' if prefs.secondary_calendar == 'gregorian' else '' }}>Gregorian</option>
+                        <option value="hebrew" {{ 'selected' if prefs.secondary_calendar == 'hebrew' else '' }}>Hebrew</option>
+                        <option value="parsi" {{ 'selected' if prefs.secondary_calendar == 'parsi' else '' }}>Parsi (Shahenshahi)</option>
+                        <option value="hindu" {{ 'selected' if prefs.secondary_calendar == 'hindu' else '' }}>Hindu (Lunar)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Event visibility</h2>
+            <p class="section-hint">Turn off any calendar's events you don't want cluttering your grid.</p>
+
+            <div class="visibility-group">
+                <h3>Islamic communities</h3>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-bohra"></span>Bohra events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_bohra" value="yes" {{ 'checked' if prefs.show_bohra else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-sunni"></span>Sunni events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_sunni" value="yes" {{ 'checked' if prefs.show_sunni else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-shia"></span>Shia events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_shia" value="yes" {{ 'checked' if prefs.show_shia else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="visibility-group">
+                <h3>Other traditions &amp; civil</h3>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-christian"></span>Christian events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_christian" value="yes" {{ 'checked' if prefs.show_christian else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-jewish"></span>Jewish events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_jewish" value="yes" {{ 'checked' if prefs.show_jewish else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-hindu"></span>Hindu events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_hindu" value="yes" {{ 'checked' if prefs.show_hindu else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-parsi"></span>Parsi events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_parsi" value="yes" {{ 'checked' if prefs.show_parsi else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-french"></span>French civil events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_french" value="yes" {{ 'checked' if prefs.show_french else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div class="visibility-group">
+                <h3>Yours</h3>
+                <div class="toggle-row">
+                    <span class="toggle-label"><span class="toggle-dot dot-personal"></span>My personal events</span>
+                    <label class="switch">
+                        <input type="checkbox" name="show_personal" value="yes" {{ 'checked' if prefs.show_personal else '' }}>
+                        <span class="slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Location</h2>
+            <p class="section-hint">Used to calculate prayer times and qibla direction.</p>
+
+            <div class="location-btn-row">
+                <button type="button" id="use-my-location" class="use-location-btn">
+                    <span aria-hidden="true">&#128205;</span> Use my current location
+                </button>
+                <div id="geo-status" class="note" style="display:none;margin-top:10px;"></div>
+            </div>
+
+            <div class="field" style="margin-bottom:14px;">
+                <label for="f-location-name">Location name</label>
+                <div class="lookup-row">
+                    <input type="text" name="location_name" id="f-location-name" value="{{ location.name }}" required>
+                    <button type="button" id="lookup-location" class="lookup-btn">Find</button>
+                </div>
+                <div id="lookup-status" class="note" style="display:none;"></div>
+            </div>
+
+            <div class="field-grid">
+                <div class="field">
+                    <label for="f-lat">Latitude</label>
+                    <input type="number" step="any" name="lat" id="f-lat" value="{{ location.lat }}" required>
+                </div>
+                <div class="field">
+                    <label for="f-lng">Longitude</label>
+                    <input type="number" step="any" name="lng" id="f-lng" value="{{ location.lng }}" required>
+                </div>
+            </div>
+            <div class="field" style="margin-top:14px;">
+                <label for="f-tz">Timezone offset from UTC (e.g. 5.5 for India)</label>
+                <input type="number" step="any" name="tz_offset" id="f-tz" value="{{ location.tz_offset }}" required>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <h2>Sound reminders</h2>
+            <p class="section-hint">
+                Fine-grained control over what rings. This works alongside the
+                "Sound reminders" switch in the sidebar -- that one is the master
+                on/off for this browser; these two decide which categories ring
+                and what they sound like, and are saved to your account like
+                everything else on this page.
+            </p>
+
+            <div class="toggle-row">
+                <span class="toggle-label">Azaan reminders</span>
+                <label class="switch">
+                    <input type="checkbox" name="alert_azaan" value="yes" {{ 'checked' if prefs.alert_azaan else '' }}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <p class="section-hint" style="margin:-4px 0 14px;">
+                Only rings while your <strong>default calendar</strong> above is a
+                Hijri-family one (Bohra, Sunni, or Shia) -- azaan times don't mean
+                much while you're browsing the Gregorian, Hebrew, Parsi, or Hindu
+                grid, so this switches off automatically on those, even if it's
+                checked here.
+            </p>
+
+            <div class="toggle-row">
+                <span class="toggle-label">Birthday &amp; anniversary reminders</span>
+                <label class="switch">
+                    <input type="checkbox" name="alert_birthday_anniversary" value="yes" {{ 'checked' if prefs.alert_birthday_anniversary else '' }}>
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="field-grid" style="margin-top:14px;">
+                <div class="field">
+                    <label for="f-birthday-ringtone">Birthday ringtone</label>
+                    <div style="display:flex;gap:6px;">
+                        <select name="birthday_ringtone" id="f-birthday-ringtone" style="flex:1;">
+                            {% for key, opt in ringtone_options.items() %}
+                            <option value="{{ key }}" {{ 'selected' if prefs.birthday_ringtone == key else '' }}>{{ opt.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="ringtone-preview-btn" data-select="f-birthday-ringtone" title="Play the selected sound">&#9654;</button>
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="f-anniversary-ringtone">Anniversary ringtone</label>
+                    <div style="display:flex;gap:6px;">
+                        <select name="anniversary_ringtone" id="f-anniversary-ringtone" style="flex:1;">
+                            {% for key, opt in ringtone_options.items() %}
+                            <option value="{{ key }}" {{ 'selected' if prefs.anniversary_ringtone == key else '' }}>{{ opt.label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="ringtone-preview-btn" data-select="f-anniversary-ringtone" title="Play the selected sound">&#9654;</button>
+                    </div>
+                </div>
+            </div>
+            <p class="section-hint" style="margin-top:6px;">
+                Pick a sound in either dropdown, then tap &#9654; next to it to hear it before saving.
+                Only "Synth beep" is guaranteed to play everywhere -- the others need their file to
+                actually exist (either one of the built-ins under <code>static/sounds/</code>, or
+                something you've uploaded yourself below); until then that choice silently falls back
+                to the synth beep instead of failing.
+            </p>
+            <p class="section-hint">
+                Want a specific person's birthday to always use a different
+                ringtone than the category default? That's a per-event setting
+                on the <a href="{{ url_for('events_view', tab='personal') }}">event itself</a>,
+                not here -- these two selects are the category-wide fallback.
+            </p>
+
+            <div class="ringtone-upload-card">
+                <h3 style="margin:0 0 4px;font-size:14px;">Upload your own ringtone</h3>
+                <p class="section-hint" style="margin:0 0 10px;">
+                    Don't like the built-in options? Upload an mp3/wav/ogg/m4a/aac
+                    file (under 5&nbsp;MB) and it'll show up as a choice in both
+                    dropdowns above, and as a per-event override on individual events.
+                </p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                    <div class="field" style="flex:1;min-width:160px;margin:0;">
+                        <label for="f-ringtone-file">Audio file</label>
+                        <input type="file" id="f-ringtone-file" name="ringtone_file" accept="audio/*">
+                    </div>
+                    <div class="field" style="flex:1;min-width:160px;margin:0;">
+                        <label for="f-ringtone-label">Name it (optional)</label>
+                        <input type="text" id="f-ringtone-label" name="ringtone_label" placeholder="e.g. Amma's favorite bell">
+                    </div>
+                    <button type="button" id="ringtone-upload-btn" class="btn-save" style="padding:9px 16px;">Upload</button>
+                </div>
+
+                {% if custom_ringtones %}
+                <div class="ringtone-upload-list">
+                    {% for r in custom_ringtones %}
+                    <div class="ringtone-upload-row">
+                        <span>{{ r.label }}</span>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <button type="button" class="ringtone-preview-btn" data-key="{{ r.key }}" title="Play">&#9654;</button>
+                            <button type="button" class="link-btn ringtone-delete-btn" data-key="{{ r.key }}"
+                                    data-url="{{ url_for('delete_ringtone', key=r.key) }}" style="color:#b5121b;">delete</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="settings-section">
+    <h2>Vastu Shastra</h2>
+    <p class="section-hint" style="margin:0;">
+        Vastu Shastra is the traditional Indian system of architecture and design.
+        Your property details (home orientation, entrance direction, toilet placement) and
+        daily guidance now live together on the <a href="{{ url_for('vastu_view') }}">Vastu</a> page --
+        head there to set or update them.
+    </p>
+</div>
+
+        <div class="settings-actions">
+            <button type="submit" class="btn-save">Save all settings</button>
+            <button type="button" class="btn-cancel" onclick="window.location.href='{{ url_for('calendar_view') }}'">Cancel</button>
+        </div>
+    </form>
+
+    <p class="note" style="margin-top:16px;">Settings are stored in your browser session only (not a real user account system).</p>
+</div>
+
+<script>
+(function(){
+    var geoBtn = document.getElementById('use-my-location');
+    var geoStatus = document.getElementById('geo-status');
+    var lookupBtn = document.getElementById('lookup-location');
+    var lookupStatus = document.getElementById('lookup-status');
+    var nameField = document.getElementById('f-location-name');
+    var latField = document.getElementById('f-lat');
+    var lngField = document.getElementById('f-lng');
+    var tzField = document.getElementById('f-tz');
+
+    function setMsg(el, msg, isError){
+        el.style.display = 'block';
+        el.textContent = msg;
+        el.style.color = isError ? '#b5121b' : '#666';
+    }
+
+    function resolveTzOffset(lat, lng, fallback){
+        return fetch('/api/tz-offset?lat=' + lat + '&lng=' + lng)
+            .then(function(r){ return r.json(); })
+            .then(function(data){
+                return (data && typeof data.offset === 'number') ? data.offset : fallback;
+            })
+            .catch(function(){ return fallback; });
+    }
+
+    function formatPlaceName(addr, fallback){
+        if (!addr) return fallback;
+        var norm = function(s){ return (s || '').trim().toLowerCase(); };
+
+        var place = addr.city || addr.town || addr.village || addr.county || addr.municipality;
+        var state = addr.state || addr.region;
+        var country = addr.country;
+
+        if (!place && state) {
+            place = state;
+            state = null;
+        }
+
+        var parts = [];
+        if (place) parts.push(place);
+        if (state && norm(state) !== norm(place) && norm(state) !== norm(country)) {
+            parts.push(state);
+        }
+        if (country && norm(country) !== norm(place)) parts.push(country);
+        return parts.length ? parts.join(', ') : fallback;
+    }
+
+    geoBtn.addEventListener('click', function(){
+        if (!('geolocation' in navigator)) {
+            setMsg(geoStatus, 'Your browser does not support location detection -- enter details manually.', true);
+            return;
+        }
+        setMsg(geoStatus, 'Getting your location...', false);
+        geoBtn.disabled = true;
+
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var lat = pos.coords.latitude, lng = pos.coords.longitude;
+            latField.value = lat.toFixed(6);
+            lngField.value = lng.toFixed(6);
+            var deviceOffset = -(new Date().getTimezoneOffset()) / 60;
+            tzField.value = deviceOffset;
+            setMsg(geoStatus, 'Location filled in. Confirming timezone and looking up a place name...', false);
+
+            resolveTzOffset(lat, lng, deviceOffset).then(function(offset){
+                tzField.value = offset;
+            });
+
+            fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&zoom=10')
+                .then(function(r){ return r.json(); })
+                .then(function(data){
+                    var name = formatPlaceName(data.address, null);
+                    if (name) {
+                        nameField.value = name;
+                        setMsg(geoStatus, 'Filled in: ' + name + '. Review and hit Save.', false);
+                    } else {
+                        setMsg(geoStatus, 'Coordinates filled in, but no place name found -- type one in and hit Save.', false);
+                    }
+                })
+                .catch(function(){
+                    setMsg(geoStatus, 'Coordinates filled in (place-name lookup failed) -- type a name in and hit Save.', false);
+                })
+                .finally(function(){ geoBtn.disabled = false; });
+        }, function(err){
+            geoBtn.disabled = false;
+            if (err.code === err.PERMISSION_DENIED) {
+                setMsg(geoStatus, 'Location permission denied -- enter details manually below.', true);
+            } else {
+                setMsg(geoStatus, 'Could not get your location (' + err.message + ') -- enter details manually.', true);
+            }
+        }, { enableHighAccuracy: false, timeout: 10000 });
+    });
+
+    function lookupTypedLocation(){
+        var query = nameField.value.trim();
+        if (!query) {
+            setMsg(lookupStatus, 'Type a place name first.', true);
+            return;
+        }
+        setMsg(lookupStatus, 'Looking up "' + query + '"...', false);
+        lookupBtn.disabled = true;
+
+        fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=1&q=' + encodeURIComponent(query))
+            .then(function(r){ return r.json(); })
+            .then(function(results){
+                if (!results || !results.length) {
+                    setMsg(lookupStatus, 'No match found for "' + query + '" -- try a more specific name.', true);
+                    return;
+                }
+                var r = results[0];
+                var lat = parseFloat(r.lat), lng = parseFloat(r.lon);
+                latField.value = lat.toFixed(6);
+                lngField.value = lng.toFixed(6);
+                var fullName = formatPlaceName(r.address, r.display_name);
+                nameField.value = fullName;
+                setMsg(lookupStatus, 'Found: ' + fullName + '. Looking up timezone...', false);
+
+                return resolveTzOffset(lat, lng, Math.round((lng / 15) * 2) / 2).then(function(offset){
+                    tzField.value = offset;
+                    var sign = offset >= 0 ? '+' : '';
+                    setMsg(lookupStatus, 'Found: ' + fullName + ' (UTC' + sign + offset + '). Review and hit Save.', false);
+                });
+            })
+            .catch(function(){
+                setMsg(lookupStatus, 'Lookup failed (network or rate limit) -- try again, or enter coordinates manually.', true);
+            })
+            .finally(function(){ lookupBtn.disabled = false; });
+    }
+
+    lookupBtn.addEventListener('click', lookupTypedLocation);
+    nameField.addEventListener('keydown', function(e){
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            lookupTypedLocation();
+        }
+    });
+})();
+
+// ---- Ringtone preview / upload / delete ----
+// These live inside the page's single big settings <form>, but every
+// button here is type="button" (never type="submit") and every network
+// call goes through fetch(), specifically so none of this ever triggers
+// or nests inside that form's own POST -- a real nested <form> would be
+// invalid HTML and browsers handle it inconsistently.
+(function(){
+    document.querySelectorAll('.ringtone-preview-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            var key = btn.dataset.key;
+            if (!key && btn.dataset.select) {
+                var sel = document.getElementById(btn.dataset.select);
+                key = sel ? sel.value : null;
+            }
+            if (key && window.previewRingtone) window.previewRingtone(key);
+        });
+    });
+
+    var uploadBtn = document.getElementById('ringtone-upload-btn');
+    if (uploadBtn) {
+        uploadBtn.addEventListener('click', function(){
+            var fileInput = document.getElementById('f-ringtone-file');
+            if (!fileInput.files.length) {
+                alert('Choose an audio file first.');
+                return;
+            }
+            var fd = new FormData();
+            fd.append('ringtone_file', fileInput.files[0]);
+            fd.append('ringtone_label', document.getElementById('f-ringtone-label').value);
+            uploadBtn.disabled = true;
+            uploadBtn.textContent = 'Uploading\u2026';
+            fetch('{{ url_for("upload_ringtone") }}', {method: 'POST', body: fd})
+                .then(function(resp){
+                    if (!resp.ok) {
+                        return resp.json().then(function(data){
+                            throw new Error(data.error || 'Upload failed.');
+                        });
+                    }
+                    window.location.reload();
+                })
+                .catch(function(err){
+                    alert(err.message || 'Upload failed -- check your connection and try again.');
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = 'Upload';
+                });
+        });
+    }
+
+    document.querySelectorAll('.ringtone-delete-btn').forEach(function(btn){
+        btn.addEventListener('click', function(){
+            if (!confirm('Delete this ringtone?')) return;
+            fetch(btn.dataset.url, {method: 'POST'})
+                .then(function(resp){
+                    if (!resp.ok) throw new Error('Delete failed.');
+                    window.location.reload();
+                })
+                .catch(function(){ alert('Delete failed -- try again.'); });
+        });
+    });
+})();
+</script>
+{% endblock %}
