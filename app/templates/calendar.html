@@ -211,6 +211,9 @@
   }
   .today-btn:hover{background:#f7f5f2}
 
+  .calendar-brand-row{display:flex;justify-content:center;padding:6px 0 2px;}
+  .calendar-brand-icon{height:44px;width:44px;display:block;}
+
   /* Layout: main grid + detail column side by side on wide screens,
      stacked on narrow ones. This assumes .calendar-wrap is a flex/grid
      parent set in base.html -- if it isn't, this rule has nothing to
@@ -228,9 +231,6 @@
     <div class="calendar-main">
         <div class="calendar-toolbar">
             <button type="button" class="toolbar-note-btn" onclick="if(window.openStickyNote) window.openStickyNote();">&#128221; Note</button>
-            {% if cal in ['hijri', 'sunni', 'shia'] %}
-            <a href="{{ url_for('qibla_view') }}" class="toolbar-note-btn" title="Qibla direction">&#129517; Qibla</a>
-            {% endif %}
             <form method="get" action="{{ url_for('calendar_view') }}" class="goto-date-inline">
                 <input type="hidden" name="cal" value="{{ cal }}">
                 <input type="date" name="goto" id="goto-date-input" aria-label="Go to date">
@@ -242,6 +242,12 @@
                  them, tell me and I'll pass today's hijri/gregorian values
                  explicitly instead. -->
             <a class="today-btn" href="{{ url_for('calendar_view', cal=cal) }}">Today</a>
+        </div>
+
+        <!-- Brand mark moved down here from the topbar, sitting right below
+             the toolbar and above the month header. -->
+        <div class="calendar-brand-row">
+            <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="calendar-brand-icon">
         </div>
 
         <div class="calendar-nav">
@@ -499,40 +505,10 @@
     
     <div class="calendar-detail">
 
-        <div class="detail-panel" id="day-panel">
-            {% if selected_day %}
-                <h3 style="margin-top:0">{{ selected_day.hijri_day }} {{ month_name }} &middot; {{ selected_day.gregorian.strftime('%d %b %Y') }}</h3>
-                {% if selected_day.events or selected_day.interfaith or selected_day.personal %}
-                <div class="events-panel">
-                    {% set src_labels = {'bohra': 'Bohra', 'sunni': 'Sunni', 'shia': 'Shia'} %}
-                    {% for e in selected_day.events %}
-                    {% set src = e.event_source or 'bohra' %}
-                    <div class="event-row {{ e.color }}">
-                        <strong><span class="event-src-dot" style="background:var(--{{ src }});"></span>{{ e.title }}</strong>
-                        <div class="event-desc">{{ src_labels.get(src, src|capitalize) }}{% if e.description %} &middot; {{ e.description }}{% endif %}</div>
-                    </div>
-                    {% endfor %}
-                    {% for e in selected_day.interfaith %}
-                    <div class="event-row">
-                        <strong>{{ e.title }}</strong>
-                        <div class="event-desc">{{ traditions[e.tradition].label if e.tradition in traditions else e.tradition }}</div>
-                    </div>
-                    {% endfor %}
-                    {% for e in selected_day.personal %}
-                    <div class="event-row">
-                        <strong>{{ e.title }}</strong>
-                        <div class="event-desc">{{ e.category|capitalize }}{% if e.description %} &middot; {{ e.description }}{% endif %}</div>
-                    </div>
-                    {% endfor %}
-                </div>
-                {% else %}
-                <div class="empty-panel">No events on {{ selected_day.hijri_day }} {{ month_name }}.</div>
-                {% endif %}
-            {% else %}
-                <h3 style="margin-top:0">Select a day</h3>
-                <div class="empty-panel">Click any date in the grid to see its Bohra and interfaith events here.</div>
-            {% endif %}
-        </div>
+        <!-- The old "Select a day" click-to-preview panel used to live here.
+             It's been moved to its own dedicated page (see today_view /
+             today.html), which shows today's -- or any picked day's --
+             events front and center instead of tucking them in this sidebar. -->
 
         <div class="detail-panel my-events-panel">
             <h3>My events <button type="button" class="add-event-btn" onclick="openAddEventModal()">+ Add event</button></h3>

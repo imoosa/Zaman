@@ -484,5 +484,10 @@ form button:hover { opacity: 0.9; }
   /* Room at the bottom of the page so content doesn't sit under the
      fixed tab bar, and lift the sticky note above it too. */
   .main-content { padding: 12px 12px calc(72px + env(safe-area-inset-bottom)); }
-  .notes-widget { bottom: calc(16px + 64px + env(safe-area-inset-bottom)); }
+  /* The floating sticky-note widget (and its "+ Note" reopen pill) sits
+     at a hardcoded bottom-right position that collides with the fixed
+     bottom tab bar on mobile. The toolbar's own "Note" button on
+     calendar.html already opens this same note, so it's safe to just
+     hide the floating copy on small screens instead of relocating it. */
+  .notes-widget, .note-reopen-btn { display: none !important; }
 }

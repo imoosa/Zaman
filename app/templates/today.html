@@ -1,0 +1,126 @@
+<!-- today.html
+     New standalone "Today" page. Replaces the old "Select a day" panel
+     that used to live in calendar.html's sidebar -- instead of a small
+     click-to-preview box next to the month grid, this is its own page:
+     a big date header (today's by default) with that day's events
+     underneath, and a way to jump to a different date and see that
+     day's events in the same spot instead.
+
+     [guessing] Variables this template expects from today_view():
+       view_date        -- date object being displayed (today unless a
+                            different date was picked)
+       is_today          -- bool, view_date == today
+       native            -- dict: day, month_name, year, calendar_label
+                            (same shape widget_today.html already uses
+                            for the user's chosen native/Hijri calendar)
+       day_events        -- Bohra/Sunni/Shia events on view_date (same
+                            shape as calendar.html's selected_day.events,
+                            each with .title, .color, .event_source,
+                            .description)
+       interfaith_events -- events from interfaith_calendar.py on view_date
+                            (each with .title, .tradition)
+       personal_events   -- the user's personal events on view_date (each
+                            with .title, .category, .description)
+       traditions        -- the same tradition-label dict used elsewhere
+       prev_date_iso / next_date_iso -- ISO date strings for the day
+                            before/after view_date, for the arrow links
+
+     If today_view() names any of these differently, tell me and I'll
+     line the template up with the real names instead of guessing.
+-->
+{% extends "base.html" %}
+{% block title %}Today{% endblock %}
+{% block content %}
+<style>
+  :root{
+    --bohra:#1E4F7A;
+    --sunni:#1e8449;
+    --shia:#922b73;
+  }
+
+  .today-page{ max-width: 640px; }
+
+  .today-hero{ text-align:center; padding: 8px 0 18px; }
+  .today-hero-label{
+    font-size:0.78rem; text-transform:uppercase; letter-spacing:.06em;
+    color: var(--ink-soft); margin-bottom:6px;
+  }
+  .today-hero-date{ font-size:1.7rem; font-weight:700; color: var(--ink); line-height:1.2; }
+  .today-hero-native{ font-size:1rem; color: var(--bohra-red); font-weight:600; margin-top:4px; }
+
+  .today-nav-row{
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    flex-wrap:wrap; padding-bottom:18px; border-bottom:1px solid var(--line); margin-bottom:18px;
+  }
+  .today-nav-row .nav-arrow{
+    text-decoration:none; color:var(--ink); font-size:1.2rem;
+    width:36px; height:36px; display:flex; align-items:center; justify-content:center;
+    border-radius:50%; border:1px solid var(--line);
+  }
+  .today-nav-row .nav-arrow:hover{ background: var(--hover); }
+  .today-nav-row .goto-date-inline{ display:flex; gap:6px; }
+  .today-nav-row input[type="date"]{
+    padding:7px 8px; border:1px solid var(--line); border-radius:8px; font-size:0.85rem;
+  }
+  .today-nav-row button, .today-nav-row .today-btn{
+    background: var(--bohra-red); color:#fff; border:none; padding:7px 14px;
+    border-radius:8px; font-size:0.85rem; cursor:pointer; text-decoration:none;
+  }
+  .today-nav-row .today-btn{ background: var(--panel); color: var(--bohra-red); border:1px solid var(--bohra-red); }
+
+  .today-events h3{ margin: 0 0 12px; font-size:1.05rem; }
+  .event-src-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+</style>
+
+<div class="card today-page">
+    <div class="today-hero">
+        <div class="today-hero-label">{{ 'Today' if is_today else 'Selected day' }}</div>
+        <div class="today-hero-date">{{ view_date.strftime('%A, %d %B %Y') }}</div>
+        {% if native %}
+        <div class="today-hero-native">{{ native.day }} {{ native.month_name }} {{ native.year }} &middot; {{ native.calendar_label }}</div>
+        {% endif %}
+    </div>
+
+    <div class="today-nav-row">
+        <a class="nav-arrow" href="{{ url_for('today_view', date=prev_date_iso) }}" title="Previous day">&lt;</a>
+        <form method="get" action="{{ url_for('today_view') }}" class="goto-date-inline">
+            <input type="date" name="date" value="{{ view_date.isoformat() }}" aria-label="Jump to date">
+            <button type="submit">Go</button>
+        </form>
+        {% if not is_today %}
+        <a class="today-btn" href="{{ url_for('today_view') }}">Back to Today</a>
+        {% endif %}
+        <a class="nav-arrow" href="{{ url_for('today_view', date=next_date_iso) }}" title="Next day">&gt;</a>
+    </div>
+
+    <div class="today-events">
+        <h3>Events</h3>
+        {% if day_events or interfaith_events or personal_events %}
+        <div class="events-panel">
+            {% set src_labels = {'bohra': 'Bohra', 'sunni': 'Sunni', 'shia': 'Shia'} %}
+            {% for e in day_events %}
+            {% set src = e.event_source or 'bohra' %}
+            <div class="event-row {{ e.color }}">
+                <strong><span class="event-src-dot" style="background:var(--{{ src }});"></span>{{ e.title }}</strong>
+                <div class="event-desc">{{ src_labels.get(src, src|capitalize) }}{% if e.description %} &middot; {{ e.description }}{% endif %}</div>
+            </div>
+            {% endfor %}
+            {% for e in interfaith_events %}
+            <div class="event-row">
+                <strong>{{ e.title }}</strong>
+                <div class="event-desc">{{ traditions[e.tradition].label if e.tradition in traditions else e.tradition }}</div>
+            </div>
+            {% endfor %}
+            {% for e in personal_events %}
+            <div class="event-row">
+                <strong>{{ e.title }}</strong>
+                <div class="event-desc">{{ e.category|capitalize }}{% if e.description %} &middot; {{ e.description }}{% endif %}</div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="empty-panel">No events on {{ view_date.strftime('%d %b %Y') }}.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
