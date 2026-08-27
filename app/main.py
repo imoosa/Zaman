@@ -1522,9 +1522,26 @@ def create_app():
 
     @app.route("/events-view", methods=["GET", "POST"])
     def events_view():
+        # Events page follows the same visibility preferences as the calendar.
+        # Bohra/Sunni/Shia are separate event sources and must never be merged.
+        prefs = get_user_prefs()
+        islamic_sources = {s for s in ("bohra", "sunni", "shia") if prefs.get(f"show_{s}", True)}
+        visible_traditions = get_visible_traditions(prefs) - {"bohra", "sunni", "shia"}
+        visible_tabs = islamic_sources | visible_traditions
+        if prefs.get("show_personal", True):
+            visible_tabs.add("personal")
+
         tab = request.args.get("tab", "bohra")
-        if tab not in ({"bohra", "personal"} | ALL_TRADITIONS):
-            tab = "bohra"
+        if tab not in visible_tabs:
+            # If the requested tab was toggled off, land on the first visible
+            # community instead of showing hidden events.
+            tab = next((s for s in ("bohra", "sunni", "shia") if s in islamic_sources), None)
+            if tab is None and prefs.get("show_personal", True):
+                tab = "personal"
+            if tab is None and visible_traditions:
+                tab = next(iter(sorted(visible_traditions)))
+            if tab is None:
+                tab = "bohra"
 
         db = get_session()
         try:
@@ -1633,14 +1650,21 @@ def create_app():
                     return redirect(url_for("calendar_view"))
                 return redirect(url_for("events_view", tab="bohra"))
 
-            events = db.query(HijriEvent).order_by(HijriEvent.hijri_month, HijriEvent.hijri_day).all()
-            # Seeded/global events (is_custom == False) are shared, default data everyone
-            # sees on the calendar and in the full Bohra list above -- they are NOT "your"
-            # events. Only ones added through the Add Event form belong in that panel.
+            # Only load the selected source. This is important for the Events
+            # page: toggling a community off must remove both its tab and its rows.
+            events = []
+            if tab in islamic_sources:
+                events = (
+                    db.query(HijriEvent)
+                    .filter(HijriEvent.event_source == tab)
+                    .order_by(HijriEvent.hijri_month, HijriEvent.hijri_day)
+                    .all()
+                )
+
             custom_events = [e for e in events if e.is_custom]
 
             interfaith_events = []
-            if tab != "bohra" and tab != "personal":
+            if tab in (ALL_TRADITIONS - {"bohra", "sunni", "shia"}):
                 interfaith_events = (
                     db.query(InterfaithEvent)
                     .filter(InterfaithEvent.tradition == tab)
@@ -1664,6 +1688,8 @@ def create_app():
             return render_template(
                 "events.html", active="events", events=events, custom_events=custom_events,
                 month_names=hc.MONTH_NAMES, tab=tab, traditions=ic.TRADITIONS,
+                visible_event_sources=islamic_sources,
+                visible_event_traditions=visible_traditions,
                 interfaith_events=interfaith_events,
                 personal_events=personal_events,
                 repeat_options=sorted(pe.VALID_REPEATS, key=["never", "weekly", "monthly", "yearly"].index),

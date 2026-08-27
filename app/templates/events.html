@@ -24,6 +24,8 @@
     .dot-jewish{background:#8e44ad;}
     .dot-hindu{background:#e67e22;}
     .dot-parsi{background:#16a085;}
+    .dot-sunni{background:#2e8b57;}
+    .dot-shia{background:#b5121b;}
 
     .events-layout{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start;}
     @media (max-width: 860px){.events-layout{grid-template-columns:1fr;}}
@@ -97,9 +99,21 @@
 </div>
 
 <div class="events-tabs">
+    {% if 'bohra' in visible_event_sources %}
     <a href="{{ url_for('events_view', tab='bohra') }}" class="menu-tab {{ 'active-tab' if tab == 'bohra' else '' }}">
         <span class="tradition-dot dot-bohra"></span> Bohra
     </a>
+    {% endif %}
+    {% if 'sunni' in visible_event_sources %}
+    <a href="{{ url_for('events_view', tab='sunni') }}" class="menu-tab {{ 'active-tab' if tab == 'sunni' else '' }}">
+        <span class="tradition-dot dot-sunni"></span> Sunni
+    </a>
+    {% endif %}
+    {% if 'shia' in visible_event_sources %}
+    <a href="{{ url_for('events_view', tab='shia') }}" class="menu-tab {{ 'active-tab' if tab == 'shia' else '' }}">
+        <span class="tradition-dot dot-shia"></span> Shia
+    </a>
+    {% endif %}
     <a href="{{ url_for('events_view', tab='personal') }}" class="menu-tab {{ 'active-tab' if tab == 'personal' else '' }}">
         <span class="tradition-dot" style="background:#1f9d55"></span> Personal
     </a>
@@ -107,15 +121,19 @@
     <a href="{{ url_for('events_view', tab=key) }}" class="menu-tab {{ 'active-tab' if tab == key else '' }}">
         <span class="tradition-dot dot-{{ key }}"></span> {{ meta.label }}
     </a>
+    {% endif %}
     {% endfor %}
 </div>
 
 <div class="events-layout">
     <!-- LEFT: full list for the selected community -->
     <div class="community-list-card">
-        {% if tab == 'bohra' %}
+        {% if tab in ['bohra', 'sunni', 'shia'] %}
         <div class="community-list-head">
-            <h2><span class="tradition-dot dot-bohra"></span> Bohra events</h2>
+            <h2>
+                <span class="tradition-dot dot-{{ tab }}"></span>
+                {{ tab|capitalize }} events
+            </h2>
             <span class="community-count">{{ events|length }}</span>
         </div>
         <table class="events-table">
@@ -134,11 +152,12 @@
                     </td>
                 </tr>
             {% else %}
-                <tr><td colspan="5">No Bohra events yet. Use "+ Add Event" to create one.</td></tr>
+                <tr><td colspan="5">No {{ tab|capitalize }} events yet.</td></tr>
             {% endfor %}
             </tbody>
         </table>
 
+        {% if tab == 'bohra' %}
         <details style="padding:14px 18px;border-top:1px solid #eee;">
             <summary style="cursor:pointer;font-size:13px;color:#666;">Bulk import (paste many events at once)</summary>
             <p class="note">
@@ -164,6 +183,8 @@
             </form>
             <p class="note">Use this once you're ready to replace the placeholder sample events with your jamaat's real list.</p>
         </details>
+
+        {% endif %}
 
         {% elif tab == 'personal' %}
         <div class="community-list-head">
