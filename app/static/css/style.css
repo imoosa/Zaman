@@ -1,15 +1,15 @@
 :root {
-  --bohra-red: #1E4F7A;   /* Zaman brand Primary */
-  --secondary: #3AA7A0;   /* Zaman brand Secondary */
+  --bohra-red: #21CDC2;   /* Zaman brand Primary */
+  --secondary: #C9A227;   /* Zaman brand Secondary */
   --gold: #D4B483;        /* Zaman brand Accent */
-  --bohra-red-dark: #163D5C; /* hover/active shade of Primary */
+  --bohra-red-dark: #189A92; /* hover/active shade of Primary */
   --ink: #1f2430;
   --ink-soft: #465563;    /* Zaman brand Text/Slate */
   --line: #e3e6ec;
   --bg: #FAF8F4;          /* Zaman brand Background */
   --panel: #ffffff;
-  --today-bg: #D7E8E5;   /* Zaman brand Soft Accent */
-  --hover: #D7E8E5;       /* Zaman brand Soft Accent */
+  --today-bg: #D9F4F1;   /* Zaman brand Soft Accent */
+  --hover: #D9F4F1;       /* Zaman brand Soft Accent */
 
   --c-christian: #4b7bec;
   --c-french: #2c3e50;
