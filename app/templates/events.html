@@ -121,7 +121,6 @@
     <a href="{{ url_for('events_view', tab=key) }}" class="menu-tab {{ 'active-tab' if tab == key else '' }}">
         <span class="tradition-dot dot-{{ key }}"></span> {{ meta.label }}
     </a>
-    {% endif %}
     {% endfor %}
 </div>
 
