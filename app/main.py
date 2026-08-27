@@ -372,6 +372,23 @@ def create_app():
         return dict(sidebar_note_content=content)
 
     @app.context_processor
+    def inject_default_cal_key():
+        """base.html's nav needs to know which calendar system is active on
+        EVERY page (not just calendar_view/prayer_view, which already
+        compute a local cal_key for their own reasons) to decide whether to
+        show the Qibla tab -- Qibla direction only makes sense for the Hijri
+        family (Bohra/Sunni/Shia), not Hindu/Hebrew/Parsi/Gregorian.
+        Views that already pass their own cal_key (prayer_view) simply
+        override this default, since explicit render_template() kwargs win
+        over context processor values of the same name."""
+        cal_key = request.args.get("cal")
+        if not cal_key or cal_key not in CALENDARS:
+            cal_key = get_user_prefs().get("default_calendar", "hijri")
+        if cal_key not in CALENDARS:
+            cal_key = "hijri"
+        return dict(cal_key=cal_key)
+
+    @app.context_processor
     def inject_ringtone_options():
         """Same idea as inject_sidebar_note above -- settings.html needs
         this for its <select> options, and base.html's alert script needs
@@ -757,6 +774,66 @@ def create_app():
             "prayer_times": data["prayer"],
             "location_name": data["location_name"],
         })
+
+    def _day_data(view_date):
+        """Same aggregation as _today_widget_data() above, but for an
+        arbitrary date instead of always today -- powers /today's big
+        date header + event list, including its prev/next/date-picker
+        navigation to other days."""
+        prefs = get_user_prefs()
+        traditions = get_visible_traditions(prefs)
+
+        show_sources = {s for s in ("bohra", "sunni", "shia") if prefs.get(f"show_{s}", True)}
+        day_events = get_hijri_events_for_gregorian_range(view_date, view_date, show_sources).get(view_date, [])
+        interfaith_events = get_interfaith_by_date(view_date, view_date, traditions).get(view_date, [])
+        personal_events = get_personal_by_date(view_date, view_date).get(view_date, [])
+
+        default_cal = prefs["default_calendar"]
+        native = None
+        if default_cal in CALENDARS:
+            cal = CALENDARS[default_cal]
+            y, m, d = cal["native_of"](view_date)
+            native = {
+                "calendar_label": cal["label"],
+                "month_name": cal["month_name"](y, m),
+                "day": cal["native_label"](d) if cal["is_islamic"] else d,
+                "year": y,
+            }
+
+        return {
+            "day_events": day_events,
+            "interfaith_events": interfaith_events,
+            "personal_events": personal_events,
+            "native": native,
+        }
+
+    @app.get("/today")
+    def today_view():
+        """Big date + that day's events. Defaults to today; ?date=YYYY-MM-DD
+        shows that day instead. Replaces the old 'Select a day' preview
+        panel that used to sit in calendar.html's sidebar -- see
+        today.html for the template side of this."""
+        today_g = date.today()
+        date_str = request.args.get("date")
+        view_date = today_g
+        if date_str:
+            try:
+                view_date = date.fromisoformat(date_str)
+            except ValueError:
+                view_date = today_g
+
+        data = _day_data(view_date)
+
+        return render_template(
+            "today.html",
+            active="today",
+            view_date=view_date,
+            is_today=(view_date == today_g),
+            prev_date_iso=(view_date - timedelta(days=1)).isoformat(),
+            next_date_iso=(view_date + timedelta(days=1)).isoformat(),
+            traditions=ic.TRADITIONS,
+            **data,
+        )
 
     @app.get("/")
     def index():
