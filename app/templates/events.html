@@ -114,13 +114,17 @@
         <span class="tradition-dot dot-shia"></span> Shia
     </a>
     {% endif %}
+    {% if 'personal' in visible_event_tabs %}
     <a href="{{ url_for('events_view', tab='personal') }}" class="menu-tab {{ 'active-tab' if tab == 'personal' else '' }}">
         <span class="tradition-dot" style="background:#1f9d55"></span> Personal
     </a>
+    {% endif %}
     {% for key, meta in traditions.items() %}
-    <a href="{{ url_for('events_view', tab=key) }}" class="menu-tab {{ 'active-tab' if tab == key else '' }}">
-        <span class="tradition-dot dot-{{ key }}"></span> {{ meta.label }}
-    </a>
+        {% if key in visible_event_traditions %}
+        <a href="{{ url_for('events_view', tab=key) }}" class="menu-tab {{ 'active-tab' if tab == key else '' }}">
+            <span class="tradition-dot dot-{{ key }}"></span> {{ meta.label }}
+        </a>
+        {% endif %}
     {% endfor %}
 </div>
 

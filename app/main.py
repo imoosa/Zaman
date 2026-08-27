@@ -1533,19 +1533,24 @@ def create_app():
 
         tab = request.args.get("tab", "bohra")
         if tab not in visible_tabs:
-            # If the requested tab was toggled off, land on the first visible
-            # community instead of showing hidden events.
-            tab = next((s for s in ("bohra", "sunni", "shia") if s in islamic_sources), None)
-            if tab is None and prefs.get("show_personal", True):
-                tab = "personal"
-            if tab is None and visible_traditions:
-                tab = next(iter(sorted(visible_traditions)))
-            if tab is None:
-                tab = "bohra"
+            # A manually requested hidden tab must never expose its events.
+            # Redirect to the first category that is currently enabled.
+            next_tab = next((s for s in ("bohra", "sunni", "shia") if s in islamic_sources), None)
+            if next_tab is None and prefs.get("show_personal", True):
+                next_tab = "personal"
+            if next_tab is None and visible_traditions:
+                next_tab = sorted(visible_traditions)[0]
+            if next_tab is not None:
+                return redirect(url_for("events_view", tab=next_tab))
+            # Nothing is enabled: keep the page renderable, but expose no events.
+            tab = "none"
 
         db = get_session()
         try:
             if request.method == "POST":
+                if tab == "none":
+                    flash("No event categories are enabled in Settings.")
+                    return redirect(url_for("events_view", tab="none"))
                 if tab == "personal":
                     raw_date = request.form.get("anchor_date")
                     if not raw_date:
