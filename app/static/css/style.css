@@ -481,9 +481,18 @@ form button:hover { opacity: 0.9; }
     max-width: 100%;
   }
 
+  /* Single source of truth for how much space the fixed bottom tab bar
+     needs, so content padding and the note widget's clearance can't
+     drift out of sync with each other again. Bumped up with a real
+     buffer (not a tight calculation) because the previous 76px offset
+     still let the "+ Note" reopen pill sit on top of the Settings tab
+     on at least one real device -- safe-area-inset-bottom and label
+     wrapping vary enough across phones that a tight number isn't safe. */
+  :root{ --tabbar-clearance: calc(88px + env(safe-area-inset-bottom)); }
+
   /* Room at the bottom of the page so content doesn't sit under the
      fixed tab bar, and lift the sticky note above it too. */
-  .main-content { padding: 12px 12px calc(72px + env(safe-area-inset-bottom)); }
+  .main-content { padding: 12px 12px var(--tabbar-clearance); }
 
   /* The floating sticky-note widget defaults to a 230px card fixed at
      bottom-right, which collides with the fixed bottom tab bar on
@@ -497,10 +506,10 @@ form button:hover { opacity: 0.9; }
   .notes-widget {
     width: min(230px, calc(100vw - 32px));
     right: 16px;
-    bottom: calc(16px + 60px + env(safe-area-inset-bottom));
+    bottom: calc(16px + var(--tabbar-clearance));
   }
   .note-reopen-btn {
     right: 16px;
-    bottom: calc(16px + 60px + env(safe-area-inset-bottom));
+    bottom: calc(16px + var(--tabbar-clearance));
   }
 }
