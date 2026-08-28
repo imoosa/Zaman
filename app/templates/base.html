@@ -32,7 +32,45 @@
             display:flex; align-items:center; justify-content:center; flex:1;
         }
         body.nav-bottom-fixed .topbar > .brand{ display:none; }
-        .brand-icon-mobile{ width:26px; height:26px; object-fit:contain; display:block; }
+
+        /* Redundant once the logo itself links to Calendar in mobile mode --
+           kept for desktop, where the topbar logo and this nav list are two
+           separate, smaller elements and the label still earns its space. */
+        body.nav-bottom-fixed .calendar-nav-link{ display:none; }
+
+        /* Raised, ring-highlighted center logo button for the mobile bottom
+           bar. Sized up from 26px and floated above the bar (like a FAB)
+           so it reads as a distinct, tappable control rather than a small
+           decorative icon sitting flush in a row of text tabs. */
+        .menu-brand-link{
+            position: relative;
+            margin-top: -22px;
+        }
+        .brand-icon-mobile{
+            width: 46px; height: 46px; object-fit: contain; display: block;
+            border-radius: 50%;
+            padding: 7px;
+            background: radial-gradient(circle at 32% 28%, #ffffff, #dcdcdc 55%, #a8a8a8 100%);
+            box-shadow:
+                0 0 0 3px #f4f4f4,
+                0 0 0 4px rgba(140,140,140,.55),
+                0 3px 10px rgba(0,0,0,.28),
+                inset 0 0 5px rgba(255,255,255,.9);
+            transition: box-shadow .18s ease, transform .12s ease;
+        }
+        /* Pressed state -- toggled by JS on touchstart (see syncMobileNav()
+           script below) rather than relying solely on :active, since :active
+           is unreliable/delayed on mobile Safari and this needs to feel
+           instant to read as a real button, not decoration. */
+        .menu-brand-link.pressed .brand-icon-mobile,
+        .menu-brand-link:active .brand-icon-mobile{
+            transform: scale(.94);
+            box-shadow:
+                0 0 0 3px #f4f4f4,
+                0 0 0 7px rgba(120,120,120,.75),
+                0 0 16px 3px rgba(160,160,160,.65),
+                inset 0 0 6px rgba(255,255,255,1);
+        }
     </style>
 </head>
 <body>
@@ -48,7 +86,7 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path></svg>
                 <span class="nav-label">Today</span>
             </a>
-            <a href="{{ url_for('calendar_view') }}" class="{{ 'active' if active == 'calendar' else '' }}">
+            <a href="{{ url_for('calendar_view') }}" class="calendar-nav-link {{ 'active' if active == 'calendar' else '' }}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 <span class="nav-label">Calendar</span>
             </a>
@@ -61,8 +99,8 @@
                  once JS confirms .menu is actually rendered as the fixed bottom
                  bar (see syncMobileNav() near the bottom of this file), so this
                  never depends on guessing style.css's breakpoint. -->
-            <a href="{{ url_for('calendar_view') }}" class="menu-brand-link" title="Zaman">
-                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="brand-icon-mobile">
+            <a href="{{ url_for('calendar_view') }}" class="menu-brand-link" title="Calendar" aria-label="Calendar">
+                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Calendar" class="brand-icon-mobile">
             </a>
             {% if cal_key in ['hijri', 'sunni', 'shia'] %}
             <!-- [guessing] mirrors the same condition calendar.html's toolbar
@@ -280,6 +318,18 @@
         }
         applyMobileNavOffset();
         window.addEventListener('resize', applyMobileNavOffset);
+
+        // Manual pressed-state toggle for the center logo button -- CSS
+        // :active alone is too laggy/inconsistent on mobile Safari to read
+        // as "this is a button", so touchstart/touchend drive it directly.
+        var brandLink = document.querySelector('.menu-brand-link');
+        if (brandLink){
+            var pressOn = function(){ brandLink.classList.add('pressed'); };
+            var pressOff = function(){ brandLink.classList.remove('pressed'); };
+            brandLink.addEventListener('touchstart', pressOn, {passive:true});
+            brandLink.addEventListener('touchend', pressOff);
+            brandLink.addEventListener('touchcancel', pressOff);
+        }
 
         var HIDE_KEY = 'sticky-note-hidden';
         function setHidden(hidden){
