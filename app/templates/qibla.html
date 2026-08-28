@@ -94,20 +94,22 @@
   .qb-accuracy.good { color:#4fd8c4; }
   .qb-accuracy.poor { color:#d4af6a; }
   
-  .qb-lock-btn {
+  .qb-deviation {
     font-family:"IBM Plex Mono",monospace;
-    font-size:10px;
-    background:transparent;
-    border:1px solid #2a3644;
-    color:#5b6b7a;
-    padding:4px 12px;
-    border-radius:4px;
-    cursor:pointer;
-    margin-top:4px;
-    transition:border-color .15s, color .15s;
+    font-size:13px;
+    color:#e6edf3;
+    margin:0 0 8px;
+    position:relative;
+    z-index:1;
   }
-  .qb-lock-btn:hover { border-color:#d4af6a; color:#d4af6a; }
-  .qb-lock-btn.is-locked { border-color:#d4af6a; color:#d4af6a; }
+  .qb-deviation .highlight {
+    color:#d4af6a;
+    font-weight:600;
+  }
+  .qb-deviation .on-target {
+    color:#4fd8c4;
+    font-weight:600;
+  }
 </style>
 
 <div class="qb-card">
@@ -140,25 +142,26 @@
       <!-- Qibla marker (gold diamond) -->
       <g id="qibla-marker" transform="rotate({{ bearing }} 120 120)">
         <polygon points="120,22 126,34 120,46 114,34" fill="#d4af6a" stroke="#d4af6a" stroke-width="1"/>
-        <line x1="120" y1="46" x2="120" y2="60" stroke="#d4af6a" stroke-width="1.5" opacity="0.6"/>
+        <line x1="120" y1="46" x2="120" y2="60" stroke="#d4af6a" stroke-width="1.5" opacity="0.4"/>
       </g>
 
       <!-- Needle (user's facing direction) -->
       <g id="qibla-needle" transform="rotate(0 120 120)">
         <line x1="120" y1="120" x2="120" y2="40" stroke="#00e5c7" stroke-width="2.5"/>
         <polygon points="120,28 111,50 129,50" fill="#00e5c7"/>
-        <circle cx="120" cy="36" r="9" fill="none" stroke="#d4af6a" stroke-width="1.5" opacity="0.5"/>
-        <rect x="115" y="31" width="10" height="10" fill="#d4af6a" opacity=".4"/>
+        <circle cx="120" cy="36" r="9" fill="none" stroke="#d4af6a" stroke-width="1.5" opacity="0.3"/>
       </g>
 
       <circle cx="120" cy="120" r="5" fill="#0a0e14" stroke="#00e5c7" stroke-width="2"/>
     </svg>
   </div>
 
+  <p class="qb-deviation" id="qb-deviation">🔄 <span class="highlight">Turn</span> until the needle points to the gold marker</p>
+
   <div class="qb-readout">
     <div class="qb-readout-item">
-      <p class="qb-readout-label">Bearing</p>
-      <p class="qb-readout-value" id="qb-bearing-display">{{ bearing }}&deg;</p>
+      <p class="qb-readout-label">Your Heading</p>
+      <p class="qb-readout-value" id="qb-heading-display">--&deg;</p>
     </div>
     <div class="qb-readout-item">
       <p class="qb-readout-label">Distance</p>
@@ -166,7 +169,7 @@
     </div>
   </div>
   
-  <p class="qb-accuracy" id="qb-accuracy">Waiting for compass...</p>
+  <p class="qb-accuracy" id="qb-accuracy">📱 Tap "Enable live compass" to start</p>
 
   <button type="button" id="qibla-live-btn" class="qb-btn">Enable live compass</button>
   <p id="qibla-live-status" class="qb-status"><span class="qb-dot" id="qibla-dot"></span><span id="qibla-status-text"></span></p>
@@ -187,25 +190,16 @@
     var statusText = document.getElementById('qibla-status-text');
     var statusDot = document.getElementById('qibla-dot');
     var staticNote = document.getElementById('qibla-static-note');
-    var bearingDisplay = document.getElementById('qb-bearing-display');
+    var headingDisplay = document.getElementById('qb-heading-display');
     var accuracyEl = document.getElementById('qb-accuracy');
+    var deviationEl = document.getElementById('qb-deviation');
 
     var live = false;
-    var locked = false;
-    var lockedHeading = 0;
+    var heading = 0;
     
-    // --- Enhanced smoothing with adaptive filter ---
-    var SMOOTHING = 0.12;          // Base smoothing factor
-    var MIN_SMOOTHING = 0.05;      // Minimum smoothing (fast response)
-    var MAX_SMOOTHING = 0.25;      // Maximum smoothing (very stable)
+    // Simple but effective smoothing - just enough to stop jitter
+    var SMOOTHING = 0.25;
     var sx = null, sy = null;
-    var headingHistory = [];
-    var MAX_HISTORY = 8;
-    var lastHeading = 0;
-    
-    // Jitter detection
-    var jitterCount = 0;
-    var JITTER_THRESHOLD = 2.5;    // Degrees change considered jitter
     
     function norm(deg){ return ((deg % 360) + 360) % 360; }
 
@@ -228,42 +222,18 @@
         }
     })();
 
-    // Adaptive smoothing: increase smoothing when jitter is detected
-    function getAdaptiveSmoothing(rawHeading) {
-        if (sx === null) return SMOOTHING;
-        
-        // Calculate current change rate
-        var prev = norm(Math.atan2(sx, sy) * 180 / Math.PI);
-        var diff = Math.abs(norm(rawHeading - prev));
-        if (diff > 180) diff = 360 - diff;
-        
-        // Increase smoothing when jitter is high
-        if (diff > JITTER_THRESHOLD) {
-            jitterCount = Math.min(jitterCount + 1, 10);
-        } else {
-            jitterCount = Math.max(jitterCount - 1, 0);
-        }
-        
-        // Map jitter count to smoothing factor
-        var factor = SMOOTHING + (jitterCount / 20) * (MAX_SMOOTHING - SMOOTHING);
-        return Math.min(MAX_SMOOTHING, Math.max(MIN_SMOOTHING, factor));
-    }
-
-    function smooth(rawHeading){
+    function smoothHeading(rawHeading){
         var rad = rawHeading * Math.PI / 180;
         var nx = Math.sin(rad), ny = Math.cos(rad);
         if (sx === null) { 
             sx = nx; sy = ny; 
             return rawHeading;
         }
-        
-        var smoothing = getAdaptiveSmoothing(rawHeading);
-        sx += (nx - sx) * smoothing;
-        sy += (ny - sy) * smoothing;
+        sx += (nx - sx) * SMOOTHING;
+        sy += (ny - sy) * SMOOTHING;
         return norm(Math.atan2(sx, sy) * 180 / Math.PI);
     }
 
-    // Tilt-compensated heading
     function tiltCompensatedHeading(alpha, beta, gamma){
         var aR = alpha * Math.PI / 180, bR = beta * Math.PI / 180, gR = gamma * Math.PI / 180;
         var cA = Math.cos(aR), sA = Math.sin(aR);
@@ -273,24 +243,42 @@
         var rB = -sA * sG + cA * sB * cG;
         return norm(Math.atan2(rA, rB) * 180 / Math.PI);
     }
-    
-    // Calculate accuracy based on sensor readings
-    function getAccuracy(rawHeading, smoothedHeading) {
-        var diff = Math.abs(norm(rawHeading - smoothedHeading));
-        if (diff > 180) diff = 360 - diff;
-        if (diff < 2) return { label: 'Good', class: 'good', emoji: '✓' };
-        if (diff < 5) return { label: 'Fair', class: '', emoji: '~' };
-        return { label: 'Poor - move your phone in a figure-8', class: 'poor', emoji: '⟳' };
-    }
 
-    function resetToStatic(){
-        needle.setAttribute('transform', 'rotate(0 120 120)');
-        marker.setAttribute('transform', 'rotate(' + BEARING + ' 120 120)');
-        dial.removeAttribute('transform');
-        ticks.removeAttribute('transform');
-        sx = sy = null;
-        headingHistory = [];
-        bearingDisplay.textContent = BEARING + '\u00b0';
+    function updateCompass(heading) {
+        // Dial rotates opposite to heading (like a real compass)
+        var dialRotation = norm(-heading);
+        // Needle points to heading (user's facing direction)
+        var needleRotation = heading;
+        
+        dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
+        ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
+        needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(1) + ' 120 120)');
+        
+        // Calculate deviation from Qibla
+        var deviation = norm(BEARING - heading);
+        var deviationDisplay = deviation;
+        if (deviationDisplay > 180) deviationDisplay = 360 - deviationDisplay;
+        
+        headingDisplay.textContent = heading.toFixed(1) + '\u00b0';
+        
+        // Update status
+        if (deviation < 5) {
+            deviationEl.innerHTML = '🎯 <span class="on-target">You are facing the Qibla!</span>';
+            accuracyEl.textContent = '✅ Excellent accuracy';
+            accuracyEl.className = 'qb-accuracy good';
+        } else if (deviation < 30) {
+            var dir = deviation < 180 ? 'right' : 'left';
+            var turnAmount = deviationDisplay;
+            deviationEl.innerHTML = '↗ Turn <span class="highlight">' + turnAmount.toFixed(0) + '\u00b0</span> to the ' + dir;
+            accuracyEl.textContent = '✓ Good accuracy';
+            accuracyEl.className = 'qb-accuracy good';
+        } else {
+            var dir = deviation < 180 ? 'right' : 'left';
+            var turnAmount = deviationDisplay;
+            deviationEl.innerHTML = '🔄 Turn <span class="highlight">' + turnAmount.toFixed(0) + '\u00b0</span> to the ' + dir;
+            accuracyEl.textContent = '~ Fair accuracy - move slowly';
+            accuracyEl.className = 'qb-accuracy';
+        }
     }
 
     var handler = function(e){
@@ -302,64 +290,21 @@
         }
         if (rawMagnetic === null) return;
 
-        var rawTrue = norm(rawMagnetic + DECLINATION);
-        var heading = smooth(rawTrue);
-        
-        // When locked, use the locked heading
-        if (locked) {
-            heading = lockedHeading;
-        }
-        
-        // Store history for stability check
-        headingHistory.push(heading);
-        if (headingHistory.length > MAX_HISTORY) headingHistory.shift();
-        
-        // Calculate average heading from history (optional stability)
-        var avgHeading = heading;
-        if (headingHistory.length > 3) {
-            var sumSx = 0, sumSy = 0;
-            for (var i = 0; i < headingHistory.length; i++) {
-                var rad = headingHistory[i] * Math.PI / 180;
-                sumSx += Math.sin(rad);
-                sumSy += Math.cos(rad);
-            }
-            avgHeading = norm(Math.atan2(sumSx / headingHistory.length, sumSy / headingHistory.length) * 180 / Math.PI);
-        }
-        
-        // Only update if not locked
-        if (!locked) {
-            // Dial rotates opposite to heading
-            var dialRotation = norm(-heading);
-            // Needle points to heading (user's facing direction)
-            var needleRotation = heading;
-            
-            dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
-            ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
-            needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(1) + ' 120 120)');
-            
-            // Update bearing display (the angle between user and Qibla)
-            var diff = norm(BEARING - heading);
-            if (diff > 180) diff = 360 - diff;
-            bearingDisplay.textContent = diff.toFixed(1) + '\u00b0';
-            
-            // Update accuracy
-            var acc = getAccuracy(rawTrue, heading);
-            accuracyEl.textContent = acc.emoji + ' Accuracy: ' + acc.label;
-            accuracyEl.className = 'qb-accuracy ' + acc.class;
-        }
-        
-        // Status text
-        var diffToQibla = norm(BEARING - heading);
-        var directionText = '';
-        if (diffToQibla < 5) {
-            directionText = '✓ You are facing the Qibla!';
-        } else if (diffToQibla < 30) {
-            directionText = '↗ Close - turn ' + diffToQibla.toFixed(1) + '\u00b0 ' + (diffToQibla < 180 ? 'right' : 'left');
-        } else {
-            directionText = 'Turn ' + (diffToQibla < 180 ? 'right' : 'left') + ' ' + diffToQibla.toFixed(1) + '\u00b0';
-        }
-        statusText.textContent = directionText;
+        heading = smoothHeading(norm(rawMagnetic + DECLINATION));
+        updateCompass(heading);
     };
+
+    function resetToStatic(){
+        needle.setAttribute('transform', 'rotate(0 120 120)');
+        marker.setAttribute('transform', 'rotate(' + BEARING + ' 120 120)');
+        dial.removeAttribute('transform');
+        ticks.removeAttribute('transform');
+        sx = sy = null;
+        headingDisplay.textContent = '--\u00b0';
+        deviationEl.innerHTML = '🔄 <span class="highlight">Turn</span> until the needle points to the gold marker';
+        accuracyEl.textContent = '📱 Compass disabled';
+        accuracyEl.className = 'qb-accuracy';
+    }
 
     function startLive(){
         window.addEventListener('deviceorientationabsolute', handler, true);
@@ -369,14 +314,7 @@
         liveBtn.classList.add('is-live');
         statusDot.classList.add('is-live');
         staticNote.style.display = 'none';
-        accuracyEl.style.display = 'block';
-        // Reset jitter counter
-        jitterCount = 0;
-        // Unlock if locked
-        if (locked) {
-            locked = false;
-            document.querySelector('.qb-lock-btn')?.classList.remove('is-locked');
-        }
+        statusText.textContent = 'Move your phone in a figure-8 to calibrate if needed';
     }
 
     function stopLive(){
@@ -387,10 +325,7 @@
         liveBtn.classList.remove('is-live');
         statusDot.classList.remove('is-live');
         staticNote.style.display = '';
-        accuracyEl.style.display = 'none';
         statusText.textContent = '';
-        locked = false;
-        document.querySelector('.qb-lock-btn')?.classList.remove('is-locked');
         resetToStatic();
     }
 
@@ -400,7 +335,7 @@
             DeviceOrientationEvent.requestPermission().then(function(state){
                 if (state === 'granted') {
                     startLive();
-                    // iOS sometimes needs a second to start sending events
+                    // iOS sometimes needs a moment
                     setTimeout(function() {
                         if (!live) startLive();
                     }, 100);
@@ -420,46 +355,20 @@
         requestIOSPermission();
     });
 
-    // Add a lock button to freeze the reading when user thinks they're aligned
-    var lockBtn = document.createElement('button');
-    lockBtn.className = 'qb-lock-btn';
-    lockBtn.textContent = '🔒 Lock reading';
-    lockBtn.style.display = 'none';
-    liveStatus.parentNode.insertBefore(lockBtn, liveStatus.nextSibling);
-    
-    lockBtn.addEventListener('click', function() {
-        if (!live) return;
-        if (locked) {
-            locked = false;
-            lockBtn.textContent = '🔒 Lock reading';
-            lockBtn.classList.remove('is-locked');
-            statusText.textContent = 'Unlocked - continue rotating';
-        } else {
-            // Capture current heading
-            if (sx !== null && sy !== null) {
-                lockedHeading = norm(Math.atan2(sx, sy) * 180 / Math.PI);
-                locked = true;
-                lockBtn.textContent = '🔓 Unlock';
-                lockBtn.classList.add('is-locked');
-                statusText.textContent = '✓ Reading locked. Tap "Unlock" to continue adjusting.';
-            }
-        }
-    });
-
     (function autoInit(){
         if (typeof DeviceOrientationEvent === 'undefined') {
+            accuracyEl.textContent = '⚠️ Compass not supported on this device';
+            accuracyEl.className = 'qb-accuracy poor';
             return;
         }
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             liveBtn.style.display = 'inline-block';
-            lockBtn.style.display = 'inline-block';
             statusText.textContent = 'Tap below to enable the live compass.';
-            accuracyEl.textContent = '📱 Requires sensor permission';
+            accuracyEl.textContent = '📱 Tap "Enable" to start the compass';
             accuracyEl.className = 'qb-accuracy';
             return;
         }
         liveBtn.style.display = 'inline-block';
-        lockBtn.style.display = 'inline-block';
         startLive();
     })();
 })();
