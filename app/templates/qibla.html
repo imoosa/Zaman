@@ -82,6 +82,32 @@
     font-family:"IBM Plex Mono",monospace; font-size:12px; color:#5b6b7a;
     margin:14px 0 0; position:relative; z-index:1;
   }
+  
+  .qb-accuracy {
+    font-family:"IBM Plex Mono",monospace;
+    font-size:11px;
+    color:#7d8b99;
+    margin:4px 0 0;
+    position:relative;
+    z-index:1;
+  }
+  .qb-accuracy.good { color:#4fd8c4; }
+  .qb-accuracy.poor { color:#d4af6a; }
+  
+  .qb-lock-btn {
+    font-family:"IBM Plex Mono",monospace;
+    font-size:10px;
+    background:transparent;
+    border:1px solid #2a3644;
+    color:#5b6b7a;
+    padding:4px 12px;
+    border-radius:4px;
+    cursor:pointer;
+    margin-top:4px;
+    transition:border-color .15s, color .15s;
+  }
+  .qb-lock-btn:hover { border-color:#d4af6a; color:#d4af6a; }
+  .qb-lock-btn.is-locked { border-color:#d4af6a; color:#d4af6a; }
 </style>
 
 <div class="qb-card">
@@ -111,11 +137,18 @@
         <text x="34" y="125" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#7d8b99">W</text>
       </g>
 
-      <g id="qibla-needle" transform="rotate({{ bearing }} 120 120)">
+      <!-- Qibla marker (gold diamond) -->
+      <g id="qibla-marker" transform="rotate({{ bearing }} 120 120)">
+        <polygon points="120,22 126,34 120,46 114,34" fill="#d4af6a" stroke="#d4af6a" stroke-width="1"/>
+        <line x1="120" y1="46" x2="120" y2="60" stroke="#d4af6a" stroke-width="1.5" opacity="0.6"/>
+      </g>
+
+      <!-- Needle (user's facing direction) -->
+      <g id="qibla-needle" transform="rotate(0 120 120)">
         <line x1="120" y1="120" x2="120" y2="40" stroke="#00e5c7" stroke-width="2.5"/>
         <polygon points="120,28 111,50 129,50" fill="#00e5c7"/>
-        <circle cx="120" cy="36" r="9" fill="none" stroke="#d4af6a" stroke-width="2"/>
-        <rect x="115" y="31" width="10" height="10" fill="#d4af6a" opacity=".9"/>
+        <circle cx="120" cy="36" r="9" fill="none" stroke="#d4af6a" stroke-width="1.5" opacity="0.5"/>
+        <rect x="115" y="31" width="10" height="10" fill="#d4af6a" opacity=".4"/>
       </g>
 
       <circle cx="120" cy="120" r="5" fill="#0a0e14" stroke="#00e5c7" stroke-width="2"/>
@@ -125,13 +158,15 @@
   <div class="qb-readout">
     <div class="qb-readout-item">
       <p class="qb-readout-label">Bearing</p>
-      <p class="qb-readout-value">{{ bearing }}&deg;</p>
+      <p class="qb-readout-value" id="qb-bearing-display">{{ bearing }}&deg;</p>
     </div>
     <div class="qb-readout-item">
       <p class="qb-readout-label">Distance</p>
       <p class="qb-readout-value gold">{{ distance_km }} km</p>
     </div>
   </div>
+  
+  <p class="qb-accuracy" id="qb-accuracy">Waiting for compass...</p>
 
   <button type="button" id="qibla-live-btn" class="qb-btn">Enable live compass</button>
   <p id="qibla-live-status" class="qb-status"><span class="qb-dot" id="qibla-dot"></span><span id="qibla-status-text"></span></p>
@@ -141,27 +176,40 @@
 <script>
 (function(){
     var BEARING = {{ bearing }};
-    // Magnetic declination in degrees at this location (true = magnetic + declination,
-    // east-positive convention). Pass this from the server if you have it -- e.g. from
-    // a WMM/IGRF calculation keyed to the same lat/lon used for the bearing itself.
-    // Left at 0 this compass is magnetic-north-referenced, which can be off from the
-    // server's true-north bearing by several degrees depending on location.
     var DECLINATION = {{ declination|default(0) }};
 
     var dial = document.getElementById('qibla-dial');
     var needle = document.getElementById('qibla-needle');
     var ticks = document.getElementById('qibla-ticks');
+    var marker = document.getElementById('qibla-marker');
     var liveBtn = document.getElementById('qibla-live-btn');
     var liveStatus = document.getElementById('qibla-live-status');
     var statusText = document.getElementById('qibla-status-text');
     var statusDot = document.getElementById('qibla-dot');
     var staticNote = document.getElementById('qibla-static-note');
+    var bearingDisplay = document.getElementById('qb-bearing-display');
+    var accuracyEl = document.getElementById('qb-accuracy');
 
     var live = false;
-
+    var locked = false;
+    var lockedHeading = 0;
+    
+    // --- Enhanced smoothing with adaptive filter ---
+    var SMOOTHING = 0.12;          // Base smoothing factor
+    var MIN_SMOOTHING = 0.05;      // Minimum smoothing (fast response)
+    var MAX_SMOOTHING = 0.25;      // Maximum smoothing (very stable)
+    var sx = null, sy = null;
+    var headingHistory = [];
+    var MAX_HISTORY = 8;
+    var lastHeading = 0;
+    
+    // Jitter detection
+    var jitterCount = 0;
+    var JITTER_THRESHOLD = 2.5;    // Degrees change considered jitter
+    
     function norm(deg){ return ((deg % 360) + 360) % 360; }
 
-    // Draw a fine degree ring: minor ticks every 5deg, major (labeled) every 30deg.
+    // Draw ticks
     (function drawTicks(){
         var svgns = 'http://www.w3.org/2000/svg';
         for (var d = 0; d < 360; d += 5){
@@ -180,26 +228,42 @@
         }
     })();
 
-    // Raw sensor readings jitter by several degrees between events -- this smooths
-    // them out. Averaging angles directly breaks at the 0/360 wraparound (359 and 1
-    // would average to 180, the opposite direction), so we average sin/cos parts instead.
-    var SMOOTHING = 0.15;
-    var sx = null, sy = null;
+    // Adaptive smoothing: increase smoothing when jitter is detected
+    function getAdaptiveSmoothing(rawHeading) {
+        if (sx === null) return SMOOTHING;
+        
+        // Calculate current change rate
+        var prev = norm(Math.atan2(sx, sy) * 180 / Math.PI);
+        var diff = Math.abs(norm(rawHeading - prev));
+        if (diff > 180) diff = 360 - diff;
+        
+        // Increase smoothing when jitter is high
+        if (diff > JITTER_THRESHOLD) {
+            jitterCount = Math.min(jitterCount + 1, 10);
+        } else {
+            jitterCount = Math.max(jitterCount - 1, 0);
+        }
+        
+        // Map jitter count to smoothing factor
+        var factor = SMOOTHING + (jitterCount / 20) * (MAX_SMOOTHING - SMOOTHING);
+        return Math.min(MAX_SMOOTHING, Math.max(MIN_SMOOTHING, factor));
+    }
+
     function smooth(rawHeading){
         var rad = rawHeading * Math.PI / 180;
         var nx = Math.sin(rad), ny = Math.cos(rad);
-        if (sx === null) { sx = nx; sy = ny; }
-        else {
-            sx += (nx - sx) * SMOOTHING;
-            sy += (ny - sy) * SMOOTHING;
+        if (sx === null) { 
+            sx = nx; sy = ny; 
+            return rawHeading;
         }
+        
+        var smoothing = getAdaptiveSmoothing(rawHeading);
+        sx += (nx - sx) * smoothing;
+        sy += (ny - sy) * smoothing;
         return norm(Math.atan2(sx, sy) * 180 / Math.PI);
     }
 
-    // Tilt-compensated heading from the raw device-orientation Euler angles.
-    // Plain alpha (used by many qibla-style widgets) only works with the phone held
-    // flat; as soon as it's tilted toward your face -- the normal way to check a
-    // compass -- the reading skews. This applies the standard rotation-matrix fix.
+    // Tilt-compensated heading
     function tiltCompensatedHeading(alpha, beta, gamma){
         var aR = alpha * Math.PI / 180, bR = beta * Math.PI / 180, gR = gamma * Math.PI / 180;
         var cA = Math.cos(aR), sA = Math.sin(aR);
@@ -209,33 +273,92 @@
         var rB = -sA * sG + cA * sB * cG;
         return norm(Math.atan2(rA, rB) * 180 / Math.PI);
     }
+    
+    // Calculate accuracy based on sensor readings
+    function getAccuracy(rawHeading, smoothedHeading) {
+        var diff = Math.abs(norm(rawHeading - smoothedHeading));
+        if (diff > 180) diff = 360 - diff;
+        if (diff < 2) return { label: 'Good', class: 'good', emoji: '✓' };
+        if (diff < 5) return { label: 'Fair', class: '', emoji: '~' };
+        return { label: 'Poor - move your phone in a figure-8', class: 'poor', emoji: '⟳' };
+    }
 
     function resetToStatic(){
-        needle.setAttribute('transform', 'rotate(' + BEARING + ' 120 120)');
+        needle.setAttribute('transform', 'rotate(0 120 120)');
+        marker.setAttribute('transform', 'rotate(' + BEARING + ' 120 120)');
         dial.removeAttribute('transform');
+        ticks.removeAttribute('transform');
         sx = sy = null;
+        headingHistory = [];
+        bearingDisplay.textContent = BEARING + '\u00b0';
     }
 
     var handler = function(e){
         var rawMagnetic = null;
         if (typeof e.webkitCompassHeading === 'number') {
-            rawMagnetic = e.webkitCompassHeading; // iOS -- magnetic heading, tilt-compensated by the OS
+            rawMagnetic = e.webkitCompassHeading;
         } else if (typeof e.alpha === 'number' && typeof e.beta === 'number' && typeof e.gamma === 'number') {
-            rawMagnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma); // Android
+            rawMagnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
         }
         if (rawMagnetic === null) return;
 
         var rawTrue = norm(rawMagnetic + DECLINATION);
         var heading = smooth(rawTrue);
-
-        // The dial (N/E/S/W + tick ring) rotates opposite the phone's heading, like a
-        // real compass housing. The needle is fixed to the dial at its true bearing.
-        var dialRotation = norm(-heading);
-        var needleRotation = norm(BEARING - heading);
-        dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(2) + ' 120 120)');
-        ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(2) + ' 120 120)');
-        needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(2) + ' 120 120)');
-        statusText.textContent = 'Facing ' + heading.toFixed(1) + '\u00b0 true \u2014 rotate until the marker points up.';
+        
+        // When locked, use the locked heading
+        if (locked) {
+            heading = lockedHeading;
+        }
+        
+        // Store history for stability check
+        headingHistory.push(heading);
+        if (headingHistory.length > MAX_HISTORY) headingHistory.shift();
+        
+        // Calculate average heading from history (optional stability)
+        var avgHeading = heading;
+        if (headingHistory.length > 3) {
+            var sumSx = 0, sumSy = 0;
+            for (var i = 0; i < headingHistory.length; i++) {
+                var rad = headingHistory[i] * Math.PI / 180;
+                sumSx += Math.sin(rad);
+                sumSy += Math.cos(rad);
+            }
+            avgHeading = norm(Math.atan2(sumSx / headingHistory.length, sumSy / headingHistory.length) * 180 / Math.PI);
+        }
+        
+        // Only update if not locked
+        if (!locked) {
+            // Dial rotates opposite to heading
+            var dialRotation = norm(-heading);
+            // Needle points to heading (user's facing direction)
+            var needleRotation = heading;
+            
+            dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
+            ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
+            needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(1) + ' 120 120)');
+            
+            // Update bearing display (the angle between user and Qibla)
+            var diff = norm(BEARING - heading);
+            if (diff > 180) diff = 360 - diff;
+            bearingDisplay.textContent = diff.toFixed(1) + '\u00b0';
+            
+            // Update accuracy
+            var acc = getAccuracy(rawTrue, heading);
+            accuracyEl.textContent = acc.emoji + ' Accuracy: ' + acc.label;
+            accuracyEl.className = 'qb-accuracy ' + acc.class;
+        }
+        
+        // Status text
+        var diffToQibla = norm(BEARING - heading);
+        var directionText = '';
+        if (diffToQibla < 5) {
+            directionText = '✓ You are facing the Qibla!';
+        } else if (diffToQibla < 30) {
+            directionText = '↗ Close - turn ' + diffToQibla.toFixed(1) + '\u00b0 ' + (diffToQibla < 180 ? 'right' : 'left');
+        } else {
+            directionText = 'Turn ' + (diffToQibla < 180 ? 'right' : 'left') + ' ' + diffToQibla.toFixed(1) + '\u00b0';
+        }
+        statusText.textContent = directionText;
     };
 
     function startLive(){
@@ -246,7 +369,14 @@
         liveBtn.classList.add('is-live');
         statusDot.classList.add('is-live');
         staticNote.style.display = 'none';
-        statusText.textContent = 'Move your phone in a figure-8 once if the reading looks off, to calibrate its sensor.';
+        accuracyEl.style.display = 'block';
+        // Reset jitter counter
+        jitterCount = 0;
+        // Unlock if locked
+        if (locked) {
+            locked = false;
+            document.querySelector('.qb-lock-btn')?.classList.remove('is-locked');
+        }
     }
 
     function stopLive(){
@@ -257,20 +387,32 @@
         liveBtn.classList.remove('is-live');
         statusDot.classList.remove('is-live');
         staticNote.style.display = '';
+        accuracyEl.style.display = 'none';
         statusText.textContent = '';
+        locked = false;
+        document.querySelector('.qb-lock-btn')?.classList.remove('is-locked');
         resetToStatic();
     }
 
     function requestIOSPermission(){
-        // iOS 13+ Safari -- Apple requires this call to happen synchronously inside a
-        // real user gesture (a click). It can't be triggered from page-load code;
-        // that's an OS-level restriction, not a bug here.
-        DeviceOrientationEvent.requestPermission().then(function(state){
-            if (state === 'granted') startLive();
-            else statusText.textContent = 'Compass access was not allowed. You can retry below.';
-        }).catch(function(err){
-            statusText.textContent = 'Compass access failed: ' + (err && err.message ? err.message : err);
-        });
+        if (typeof DeviceOrientationEvent !== 'undefined' && 
+            typeof DeviceOrientationEvent.requestPermission === 'function') {
+            DeviceOrientationEvent.requestPermission().then(function(state){
+                if (state === 'granted') {
+                    startLive();
+                    // iOS sometimes needs a second to start sending events
+                    setTimeout(function() {
+                        if (!live) startLive();
+                    }, 100);
+                } else {
+                    statusText.textContent = 'Compass access was not allowed. You can retry below.';
+                }
+            }).catch(function(err){
+                statusText.textContent = 'Compass access failed: ' + (err && err.message ? err.message : err);
+            });
+        } else {
+            startLive();
+        }
     }
 
     liveBtn.addEventListener('click', function(){
@@ -278,16 +420,46 @@
         requestIOSPermission();
     });
 
+    // Add a lock button to freeze the reading when user thinks they're aligned
+    var lockBtn = document.createElement('button');
+    lockBtn.className = 'qb-lock-btn';
+    lockBtn.textContent = '🔒 Lock reading';
+    lockBtn.style.display = 'none';
+    liveStatus.parentNode.insertBefore(lockBtn, liveStatus.nextSibling);
+    
+    lockBtn.addEventListener('click', function() {
+        if (!live) return;
+        if (locked) {
+            locked = false;
+            lockBtn.textContent = '🔒 Lock reading';
+            lockBtn.classList.remove('is-locked');
+            statusText.textContent = 'Unlocked - continue rotating';
+        } else {
+            // Capture current heading
+            if (sx !== null && sy !== null) {
+                lockedHeading = norm(Math.atan2(sx, sy) * 180 / Math.PI);
+                locked = true;
+                lockBtn.textContent = '🔓 Unlock';
+                lockBtn.classList.add('is-locked');
+                statusText.textContent = '✓ Reading locked. Tap "Unlock" to continue adjusting.';
+            }
+        }
+    });
+
     (function autoInit(){
         if (typeof DeviceOrientationEvent === 'undefined') {
-            return; // no sensor support -- stay on the static bearing
+            return;
         }
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
             liveBtn.style.display = 'inline-block';
+            lockBtn.style.display = 'inline-block';
             statusText.textContent = 'Tap below to enable the live compass.';
+            accuracyEl.textContent = '📱 Requires sensor permission';
+            accuracyEl.className = 'qb-accuracy';
             return;
         }
         liveBtn.style.display = 'inline-block';
+        lockBtn.style.display = 'inline-block';
         startLive();
     })();
 })();
