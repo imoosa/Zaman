@@ -1,10 +1,44 @@
 {% extends "base.html" %}
 {% block title %}Qibla Direction{% endblock %}
 {% block content %}
-<div class="card center">
+<style>
+    #qibla-page h1 { color: #0f3d3e; letter-spacing: .3px; }
+    #qibla-page .qibla-warning {
+        background: #fdf6e3;
+        border: 1px solid #e6c66b;
+        color: #6b5416;
+    }
+    #qibla-page .qibla-warning a { color: #0f3d3e; font-weight: 600; }
+    #qibla-page .compass-wrap {
+        background: radial-gradient(circle at 50% 40%, #ffffff 0%, #eef6f4 70%, #dcece8 100%);
+        border-radius: 50%;
+        display: inline-block;
+        padding: 14px;
+        box-shadow: 0 6px 20px rgba(15,61,62,0.15), inset 0 0 0 1px rgba(15,61,62,0.08);
+    }
+    #qibla-page .bearing-value {
+        color: #0f3d3e;
+        font-weight: 700;
+        font-size: 1.4rem;
+    }
+    #qibla-page .sub { color: #5b6b6a; }
+    #qibla-page #qibla-live-btn {
+        background: #c8973a;
+        border: none;
+        color: #fff;
+        padding: 10px 18px;
+        border-radius: 999px;
+        font-weight: 600;
+        cursor: pointer;
+        box-shadow: 0 2px 8px rgba(200,151,58,0.35);
+    }
+    #qibla-page #qibla-live-btn:hover { background: #b5842d; }
+    #qibla-page #qibla-live-status { color: #0f3d3e; }
+</style>
+<div class="card center" id="qibla-page">
     <h1>Qibla Direction</h1>
     {% if location_is_default %}
-    <p class="note" style="background:#fff8e1;border:1px solid #ffe08a;padding:10px 14px;border-radius:8px;text-align:left;">
+    <p class="note qibla-warning" style="padding:10px 14px;border-radius:8px;text-align:left;">
         This bearing is for <strong>{{ location_name }}</strong> (default) -- it may not be your
         location. <a href="{{ url_for('settings_view') }}">Set your location</a> for an accurate direction.
     </p>
@@ -13,18 +47,19 @@
 
     <div class="compass-wrap">
         <svg id="qibla-svg" viewBox="0 0 200 200" width="220" height="220">
-            <circle cx="100" cy="100" r="95" fill="none" stroke="#333" stroke-width="2"/>
+            <circle cx="100" cy="100" r="95" fill="none" stroke="#0f3d3e" stroke-width="2" stroke-opacity="0.5"/>
+            <circle cx="100" cy="100" r="78" fill="none" stroke="#c8973a" stroke-width="1" stroke-opacity="0.6"/>
             <g id="qibla-dial">
-                <text x="100" y="20" text-anchor="middle" font-size="14">N</text>
-                <text x="180" y="105" text-anchor="middle" font-size="14">E</text>
-                <text x="100" y="190" text-anchor="middle" font-size="14">S</text>
-                <text x="20" y="105" text-anchor="middle" font-size="14">W</text>
+                <text x="100" y="20" text-anchor="middle" font-size="14" fill="#0f3d3e" font-weight="700">N</text>
+                <text x="180" y="105" text-anchor="middle" font-size="14" fill="#5b6b6a">E</text>
+                <text x="100" y="190" text-anchor="middle" font-size="14" fill="#5b6b6a">S</text>
+                <text x="20" y="105" text-anchor="middle" font-size="14" fill="#5b6b6a">W</text>
             </g>
             <g id="qibla-needle" transform="rotate({{ bearing }} 100 100)">
-                <line x1="100" y1="100" x2="100" y2="25" stroke="#254a45" stroke-width="4" />
-                <polygon points="100,15 92,35 108,35" fill="#254a45" />
+                <line x1="100" y1="100" x2="100" y2="25" stroke="#c8973a" stroke-width="4" />
+                <polygon points="100,15 92,35 108,35" fill="#c8973a" />
             </g>
-            <circle cx="100" cy="100" r="4" fill="#333"/>
+            <circle cx="100" cy="100" r="4" fill="#0f3d3e"/>
         </svg>
     </div>
 
