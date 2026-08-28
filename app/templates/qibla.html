@@ -57,14 +57,16 @@
     }
 
     /* Qibla target rotates with the live phone heading.
-       It is independent of the compass dial so it can settle precisely on Qibla. */
+       It is independent of the compass dial so it can settle precisely on Qibla.
+       Sized to match the compass face exactly (not a fixed px box) so the
+       marker orbits the rim proportionally at any screen size, same as the
+       N/E/S/W letters drawn in the SVG. */
     .qibla-target {
         position: absolute;
-        left: 50%;
-        top: 50%;
-        width: 92px;
-        height: 92px;
-        margin: -46px 0 0 -46px;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
         transform: rotate(0deg);
         transform-origin: 50% 50%;
         z-index: 8;
@@ -74,37 +76,37 @@
     .qibla-target .target-arrow {
         position: absolute;
         left: 50%;
-        top: 2px;
+        top: 6%;
         transform: translateX(-50%);
         width: 0;
         height: 0;
-        border-left: 10px solid transparent;
-        border-right: 10px solid transparent;
-        border-bottom: 30px solid #20d8cd;
+        border-left: 9px solid transparent;
+        border-right: 9px solid transparent;
+        border-bottom: 22px solid #20d8cd;
         filter: drop-shadow(0 0 6px rgba(32,216,205,.50));
     }
 
     .qibla-target .target-kaaba {
         position: absolute;
         left: 50%;
-        top: 30px;
+        top: 13%;
         transform: translateX(-50%);
-        width: 31px;
-        height: 31px;
+        width: 30px;
+        height: 30px;
         display: grid;
         place-items: center;
         border-radius: 8px;
         background: #10181c;
         border: 2px solid #20d8cd;
         color: #20d8cd;
-        font-size: 17px;
+        font-size: 16px;
         box-shadow: 0 4px 13px rgba(0,0,0,.32);
     }
 
     .qibla-target .target-label {
         position: absolute;
         left: 50%;
-        top: 65px;
+        top: 23%;
         transform: translateX(-50%);
         color: #20d8cd;
         font-size: 9px;
@@ -539,13 +541,43 @@
         }
     }
 
+    /*
+     * Plain `360 - alpha` only gives a correct heading when the phone is
+     * lying flat on a table. Held upright — the normal way anyone actually
+     * uses a Qibla compass — alpha alone becomes close to gimbal-locked and
+     * swings wildly on tiny wrist tilts (the "here and there" jumpiness).
+     * This combines alpha, beta and gamma into a proper tilt-compensated
+     * heading, the same approach browsers use internally for
+     * webkitCompassHeading on iOS.
+     */
+    function tiltCompensatedHeading(alpha, beta, gamma){
+        var aRad = alpha * Math.PI / 180;
+        var bRad = beta * Math.PI / 180;
+        var gRad = gamma * Math.PI / 180;
+
+        var cA = Math.cos(aRad), sA = Math.sin(aRad);
+        var cB = Math.cos(bRad), sB = Math.sin(bRad);
+        var cG = Math.cos(gRad), sG = Math.sin(gRad);
+
+        var rA = -cA * sG - sA * sB * cG;
+        var rB = -sA * sG + cA * sB * cG;
+
+        var heading = Math.atan2(rA, rB) * 180 / Math.PI;
+        if (heading < 0) heading += 360;
+
+        return heading;
+    }
+
     var handler = function(e){
         var raw = null;
 
         if (typeof e.webkitCompassHeading === 'number') {
+            // iOS already gives a true, tilt-compensated compass heading.
             raw = e.webkitCompassHeading;
-        } else if (typeof e.alpha === 'number') {
-            raw = (360 - e.alpha) % 360;
+        } else if (typeof e.alpha === 'number' &&
+                   typeof e.beta === 'number' &&
+                   typeof e.gamma === 'number') {
+            raw = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
         }
 
         if (raw === null || !isFinite(raw)) return;
