@@ -21,26 +21,12 @@
             width:8px; height:8px; border-radius:50%; background:var(--liturgical-accent);
             display:inline-block;
         }
-
-        /* [guessing] style.css isn't available, so this can't hardcode the
-           breakpoint it uses to turn .menu into a fixed bottom tab bar.
-           Instead body.nav-bottom-fixed is set by JS from the ACTUAL computed
-           position of .menu at runtime (see syncMobileNav() below), so this
-           stays correct even if style.css's breakpoint changes later. */
-        .menu-brand-link{ display:none; }
-        body.nav-bottom-fixed .menu-brand-link{
-            display:flex; align-items:center; justify-content:center; flex:1;
-        }
-        body.nav-bottom-fixed .topbar > .brand{ display:none; }
-        .brand-icon-mobile{ width:26px; height:26px; object-fit:contain; display:block; }
     </style>
 </head>
 <body>
     <header class="topbar">
         <span class="brand">
-            <a href="{{ url_for('calendar_view') }}" title="Calendar">
-                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="brand-icon">
-            </a>
+            <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="brand-icon">
         </span>
         <span class="liturgical-badge" title="Christian liturgical season, sets today's accent color"><span class="dot"></span>{{ liturgical_season_name }}</span>
         <nav class="menu">
@@ -55,14 +41,6 @@
             <a href="{{ url_for('prayer_view') }}" class="{{ 'active' if active == 'prayer' else '' }}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span class="nav-label">Prayer Times</span>
-            </a>
-            <!-- Mobile-only brand mark, sits in the middle of the bottom nav bar.
-                 Hidden by default (see .menu-brand-link in <style>); shown only
-                 once JS confirms .menu is actually rendered as the fixed bottom
-                 bar (see syncMobileNav() near the bottom of this file), so this
-                 never depends on guessing style.css's breakpoint. -->
-            <a href="{{ url_for('calendar_view') }}" class="menu-brand-link" title="Zaman">
-                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="brand-icon-mobile">
             </a>
             {% if cal_key in ['hijri', 'sunni', 'shia'] %}
             <!-- [guessing] mirrors the same condition calendar.html's toolbar
@@ -260,27 +238,6 @@
         var card = document.querySelector('.sticky-note-card');
         var header = document.querySelector('.notes-header');
         var reopenBtn = document.getElementById('note-reopen-btn');
-
-        // Detects whether .menu is actually rendered as a fixed bottom tab
-        // bar (true on mobile per style.css, which we don't have a copy
-        // of) by checking its real computed position/rect instead of
-        // guessing a breakpoint. Toggles body.nav-bottom-fixed (used by the
-        // .menu-brand-link CSS above) and pushes the note card + its
-        // reopen pill up so they clear the bar instead of overlapping it.
-        var navEl = document.querySelector('.topbar .menu');
-        function applyMobileNavOffset(){
-            if (!navEl) return;
-            var rect = navEl.getBoundingClientRect();
-            var fixedToBottom = getComputedStyle(navEl).position === 'fixed' &&
-                rect.bottom >= window.innerHeight - 2;
-            document.body.classList.toggle('nav-bottom-fixed', fixedToBottom);
-            var clearance = fixedToBottom ? (window.innerHeight - rect.top) + 16 : 16;
-            widget.style.bottom = clearance + 'px';
-            reopenBtn.style.bottom = clearance + 'px';
-        }
-        applyMobileNavOffset();
-        window.addEventListener('resize', applyMobileNavOffset);
-
         var HIDE_KEY = 'sticky-note-hidden';
         function setHidden(hidden){
             card.style.display = hidden ? 'none' : '';
