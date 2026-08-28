@@ -524,19 +524,9 @@
                 <div class="empty-panel">You haven't added any custom Hijri events yet.</div>
             {% endif %}
 
-            {% if personal_events %}
-                <h3 style="margin-top:18px;font-size:14px;">Personal events</h3>
-                {% for e in personal_events %}
-                <div class="user-event-row">
-                    <span class="ue-title">{{ e.title }}</span>
-                    <span class="ue-meta">
-                        {{ e.anchor_date.strftime('%d %b %Y') }}
-                        ({{ {'never': 'once', 'weekly': 'repeats weekly', 'monthly': 'repeats monthly', 'yearly': 'repeats yearly'}[e.repeat] }})
-                    </span>
-                </div>
-                {% endfor %}
-                <div style="margin-top:8px;"><a href="{{ url_for('events_view', tab='personal') }}" style="font-size:12px;">Manage personal events &rsaquo;</a></div>
-            {% endif %}
+            <!-- Personal events list moved to today.html's new "All personal
+                 events" panel, alongside the day-specific personal events
+                 that already show in the day loop there. -->
         </div>
 
         {% if today_saint %}

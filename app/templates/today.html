@@ -21,6 +21,10 @@
                             (each with .title, .tradition)
        personal_events   -- the user's personal events on view_date (each
                             with .title, .category, .description)
+       all_personal_events -- EVERY personal event the user has added,
+                            regardless of date (same shape as calendar.html's
+                            old sidebar list: .title, .anchor_date, .repeat),
+                            for the standalone "All personal events" panel
        traditions        -- the same tradition-label dict used elsewhere
        prev_date_iso / next_date_iso -- ISO date strings for the day
                             before/after view_date, for the arrow links
@@ -70,6 +74,13 @@
 
   .today-events h3{ margin: 0 0 12px; font-size:1.05rem; }
   .event-src-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+
+  .all-personal-panel{ margin-top:24px; padding-top:18px; border-top:1px solid var(--line); }
+  .all-personal-panel h3{ margin:0 0 12px; font-size:1.05rem; }
+  .all-personal-panel .user-event-row{ padding:6px 0; border-bottom:1px solid var(--line); }
+  .all-personal-panel .user-event-row:last-of-type{ border-bottom:none; }
+  .all-personal-panel .ue-title{ font-weight:600; }
+  .all-personal-panel .ue-meta{ display:block; font-size:0.8rem; color: var(--ink-soft); }
 </style>
 
 <div class="card today-page">
@@ -122,5 +133,29 @@
         <div class="empty-panel">No events on {{ view_date.strftime('%d %b %Y') }}.</div>
         {% endif %}
     </div>
+
+    <!-- Full personal-events list, moved here from calendar.html's sidebar.
+         Unlike the section above, this is NOT filtered to view_date -- it's
+         every personal event the user has ever added, same as the old panel. -->
+    <div class="all-personal-panel">
+        <h3>All personal events <button type="button" class="add-event-btn" onclick="openAddEventModal()">+ Add event</button></h3>
+        {% if all_personal_events %}
+            {% for e in all_personal_events %}
+            <div class="user-event-row">
+                <span class="ue-title">{{ e.title }}</span>
+                <span class="ue-meta">
+                    {{ e.anchor_date.strftime('%d %b %Y') }}
+                    ({{ {'never': 'once', 'weekly': 'repeats weekly', 'monthly': 'repeats monthly', 'yearly': 'repeats yearly'}[e.repeat] }})
+                </span>
+            </div>
+            {% endfor %}
+            <div style="margin-top:8px;"><a href="{{ url_for('events_view', tab='personal') }}" style="font-size:12px;">Manage personal events &rsaquo;</a></div>
+        {% else %}
+            <div class="empty-panel">You haven't added any personal events yet.</div>
+        {% endif %}
+    </div>
 </div>
+
+{% set add_event_redirect = 'today' %}
+{% include "add_events.html" %}
 {% endblock %}
