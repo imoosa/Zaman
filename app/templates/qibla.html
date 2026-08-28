@@ -173,7 +173,7 @@
 
   <button type="button" id="qibla-live-btn" class="qb-btn">Enable live compass</button>
   <p id="qibla-live-status" class="qb-status"><span class="qb-dot" id="qibla-dot"></span><span id="qibla-status-text"></span></p>
-  <p id="qibla-static-note" class="qb-static-note">Point the top of your phone toward north to align the marker.</p>
+  <p id="qibla-static-note" class="qb-static-note">Hold the phone flat and rotate slowly. Keep away from magnets, metal, and vehicle mounts.</p>
 </div>
 
 <script>
@@ -196,9 +196,11 @@
 
     var live = false;
     var heading = 0;
-    
-    // Simple but effective smoothing - just enough to stop jitter
-    var SMOOTHING = 0.25;
+    var lastTimestamp = 0;
+
+    // Circular smoothing prevents the heading from jumping at 0/360 degrees.
+    // Keep this moderate: over-smoothing makes the Qibla appear to lag behind.
+    var SMOOTHING = 0.18;
     var sx = null, sy = null;
     
     function norm(deg){ return ((deg % 360) + 360) % 360; }
@@ -245,52 +247,68 @@
     }
 
     function updateCompass(heading) {
-        // Dial rotates opposite to heading (like a real compass)
-        var dialRotation = norm(-heading);
-        // Needle points to heading (user's facing direction)
-        var needleRotation = heading;
-        
+        // The phone top is the fixed reference. Rotate the WORLD dial, ticks,
+        // and Qibla marker by -heading. The cyan needle must NOT rotate: it
+        // represents the direction the phone is physically pointing.
+        var dialRotation = -heading;
         dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
         ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(1) + ' 120 120)');
-        needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(1) + ' 120 120)');
-        
-        // Calculate deviation from Qibla
-        var deviation = norm(BEARING - heading);
-        var deviationDisplay = deviation;
-        if (deviationDisplay > 180) deviationDisplay = 360 - deviationDisplay;
-        
+        marker.setAttribute('transform', 'rotate(' + (BEARING - heading).toFixed(1) + ' 120 120)');
+        needle.setAttribute('transform', 'rotate(0 120 120)');
+
+        // Signed shortest turn: positive = turn right/clockwise, negative = left.
+        var delta = norm(BEARING - heading + 180) - 180;
+        var deviationDisplay = Math.abs(delta);
+
         headingDisplay.textContent = heading.toFixed(1) + '\u00b0';
-        
-        // Update status
-        if (deviation < 5) {
+
+        if (deviationDisplay < 5) {
             deviationEl.innerHTML = '🎯 <span class="on-target">You are facing the Qibla!</span>';
             accuracyEl.textContent = '✅ Excellent accuracy';
             accuracyEl.className = 'qb-accuracy good';
-        } else if (deviation < 30) {
-            var dir = deviation < 180 ? 'right' : 'left';
-            var turnAmount = deviationDisplay;
-            deviationEl.innerHTML = '↗ Turn <span class="highlight">' + turnAmount.toFixed(0) + '\u00b0</span> to the ' + dir;
+        } else if (deviationDisplay < 30) {
+            var dir = delta > 0 ? 'right' : 'left';
+            deviationEl.innerHTML = '↗ Turn <span class="highlight">' + deviationDisplay.toFixed(0) + '\u00b0</span> to the ' + dir;
             accuracyEl.textContent = '✓ Good accuracy';
             accuracyEl.className = 'qb-accuracy good';
         } else {
-            var dir = deviation < 180 ? 'right' : 'left';
-            var turnAmount = deviationDisplay;
-            deviationEl.innerHTML = '🔄 Turn <span class="highlight">' + turnAmount.toFixed(0) + '\u00b0</span> to the ' + dir;
+            var dir = delta > 0 ? 'right' : 'left';
+            deviationEl.innerHTML = '🔄 Turn <span class="highlight">' + deviationDisplay.toFixed(0) + '\u00b0</span> to the ' + dir;
             accuracyEl.textContent = '~ Fair accuracy - move slowly';
             accuracyEl.className = 'qb-accuracy';
         }
     }
 
     var handler = function(e){
-        var rawMagnetic = null;
-        if (typeof e.webkitCompassHeading === 'number') {
-            rawMagnetic = e.webkitCompassHeading;
-        } else if (typeof e.alpha === 'number' && typeof e.beta === 'number' && typeof e.gamma === 'number') {
-            rawMagnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
-        }
-        if (rawMagnetic === null) return;
+        var rawHeading = null;
 
-        heading = smoothHeading(norm(rawMagnetic + DECLINATION));
+        // iOS Safari supplies the most reliable compass heading through this
+        // property. It is a magnetic heading, so apply the server-supplied
+        // magnetic declination when available.
+        if (typeof e.webkitCompassHeading === 'number' && isFinite(e.webkitCompassHeading)) {
+            rawHeading = e.webkitCompassHeading + DECLINATION;
+        } else if (typeof e.alpha === 'number' && typeof e.beta === 'number' && typeof e.gamma === 'number') {
+            rawHeading = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+
+            // The alpha/beta/gamma calculation assumes portrait orientation.
+            // Compensate for a rotated screen when using the generic sensor path.
+            var screenAngle = 0;
+            if (window.screen && window.screen.orientation &&
+                typeof window.screen.orientation.angle === 'number') {
+                screenAngle = window.screen.orientation.angle;
+            } else if (typeof window.orientation === 'number') {
+                screenAngle = window.orientation;
+            }
+            rawHeading = norm(rawHeading + screenAngle);
+
+            // Absolute events on supported Chromium devices are Earth-referenced.
+            // Non-absolute events are treated as magnetic and receive declination.
+            if (e.absolute !== true) rawHeading += DECLINATION;
+        }
+
+        if (rawHeading === null || !isFinite(rawHeading)) return;
+
+        heading = smoothHeading(norm(rawHeading));
         updateCompass(heading);
     };
 
