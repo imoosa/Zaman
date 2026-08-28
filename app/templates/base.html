@@ -94,14 +94,6 @@
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
                 <span class="nav-label">Prayer Times</span>
             </a>
-            <!-- Mobile-only brand mark, sits in the middle of the bottom nav bar.
-                 Hidden by default (see .menu-brand-link in <style>); shown only
-                 once JS confirms .menu is actually rendered as the fixed bottom
-                 bar (see syncMobileNav() near the bottom of this file), so this
-                 never depends on guessing style.css's breakpoint. -->
-            <a href="{{ url_for('calendar_view') }}" class="menu-brand-link" title="Calendar" aria-label="Calendar">
-                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Calendar" class="brand-icon-mobile">
-            </a>
             {% if cal_key in ['hijri', 'sunni', 'shia'] %}
             <!-- [guessing] mirrors the same condition calendar.html's toolbar
                  already uses for its Qibla shortcut (cal in ['hijri','sunni','shia']) --
@@ -114,6 +106,15 @@
                 <span class="nav-label">Qibla</span>
             </a>
             {% endif %}
+            <!-- Mobile-only brand mark, sits in the middle of the bottom nav bar.
+                 Hidden by default (see .menu-brand-link in <style>); shown only
+                 once JS confirms .menu is actually rendered as the fixed bottom
+                 bar (see syncMobileNav() near the bottom of this file), so this
+                 never depends on guessing style.css's breakpoint. -->
+            <a href="{{ url_for('calendar_view') }}" class="menu-brand-link" title="Calendar" aria-label="Calendar">
+                <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Calendar" class="brand-icon-mobile">
+            </a>
+            
             <a href="{{ url_for('events_view') }}" class="{{ 'active' if active == 'events' else '' }}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="3" y1="10" x2="21" y2="10"></line><circle cx="8" cy="15" r="1"></circle><circle cx="12" cy="15" r="1"></circle><circle cx="16" cy="15" r="1"></circle></svg>
                 <span class="nav-label">Events</span>
