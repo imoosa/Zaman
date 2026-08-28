@@ -49,7 +49,6 @@
   .detail-panel h3{margin:0 0 var(--sp-3) 0;font-size:15px;line-height:1.3}
   .detail-panel .event-desc{margin-top:var(--sp-1)}
 
-  .my-events-panel h3{display:flex;align-items:center;justify-content:space-between;margin-top:0}
   .add-event-btn{
     background:var(--bohra);color:#fff;border:none;border-radius:var(--radius-sm);
     padding:var(--sp-2) var(--sp-4);font-size:13px;font-weight:600;cursor:pointer;
@@ -507,26 +506,11 @@
         <!-- The old "Select a day" click-to-preview panel used to live here.
              It's been moved to its own dedicated page (see today_view /
              today.html), which shows today's -- or any picked day's --
-             events front and center instead of tucking them in this sidebar. -->
+             events front and center instead of tucking them in this sidebar.
 
-        <div class="detail-panel my-events-panel">
-            <h3>My events <button type="button" class="add-event-btn" onclick="openAddEventModal()">+ Add event</button></h3>
-            {% if user_events %}
-                {% for e in user_events %}
-                <div class="user-event-row">
-                    <span class="ue-title">{{ e.title }}</span>
-                    <span class="ue-meta">{{ month_names[e.hijri_month - 1] }} {{ e.hijri_day }} (recurs yearly, Hijri)</span>
-                    {% if e.description %}<span class="ue-meta">{{ e.description }}</span>{% endif %}
-                </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-panel">You haven't added any custom Hijri events yet.</div>
-            {% endif %}
-
-            <!-- Personal events list moved to today.html's new "All personal
-                 events" panel, alongside the day-specific personal events
-                 that already show in the day loop there. -->
-        </div>
+             The "My events" list (user_events) that used to sit below it
+             has also been removed -- it's now shown on today.html's "All
+             personal events" panel instead, so it isn't duplicated here. -->
 
         {% if today_saint %}
         <div class="detail-panel saint-of-day-panel" style="border-left:4px solid var(--christian,#2b6cb0);">
