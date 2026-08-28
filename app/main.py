@@ -569,17 +569,6 @@ def create_app():
         finally:
             db.close()
 
-    def get_personal_events_list():
-        db = get_session()
-        try:
-            return (
-                db.query(PersonalEvent)
-                .order_by(PersonalEvent.anchor_date)
-                .all()
-            )
-        finally:
-            db.close()
-
     def get_hijri_events_for_gregorian_range(start_g, end_g, show_sources=None):
         """Same as before but with source filtering.
 
@@ -1034,7 +1023,6 @@ def create_app():
             traditions_on=traditions_on,
             filter_active=("filtered" in request.args),
             user_events=user_events,
-            personal_events=get_personal_events_list(),
             community_lists=get_community_lists(traditions_on, show_sources),
             location_is_default=location_is_default(),
             secondary_calendar=secondary_cal,
@@ -1695,6 +1683,7 @@ def create_app():
                 month_names=hc.MONTH_NAMES, tab=tab, traditions=ic.TRADITIONS,
                 visible_event_sources=islamic_sources,
                 visible_event_traditions=visible_traditions,
+                visible_event_tabs=visible_tabs,
                 interfaith_events=interfaith_events,
                 personal_events=personal_events,
                 repeat_options=sorted(pe.VALID_REPEATS, key=["never", "weekly", "monthly", "yearly"].index),
