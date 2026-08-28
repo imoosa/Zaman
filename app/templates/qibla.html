@@ -43,8 +43,15 @@
         box-shadow: 0 16px 45px rgba(0,0,0,.20);
     }
 
+    /* FIX #1: was width: min(88vw, 470px). vw ignores this element's own
+       ancestor padding (.qibla-page + .compass-card both eat horizontal
+       space), so on many phone widths the box was wider than the room
+       .compass-card actually had for it -- and since .compass-card clips
+       overflow, the circle got sliced off. Sizing off 100% (the parent's
+       own content box) instead of the viewport makes it physically
+       impossible to exceed the space that's clipping it. */
     .compass-wrap {
-        width: min(88vw, 470px);
+        width: min(100%, 470px);
         aspect-ratio: 1;
         margin: 0 auto;
         position: relative;
@@ -54,6 +61,16 @@
         width: 100%;
         height: 100%;
         display: block;
+    }
+
+    /* FIX #2: pin the rotation pivot for the compass rose explicitly to the
+       viewBox center (150,150). Without this, the browser's default
+       transform-origin for an SVG <g> is not guaranteed to match the
+       visual center of the circle, so rotating it could swing the needle
+       and N/E/S/W labels away from the center instead of spinning in
+       place. */
+    #qibla-dial {
+        transform-origin: 150px 150px;
     }
 
     /* Qibla target rotates with the live phone heading.
@@ -249,7 +266,9 @@
     @media (max-width: 560px) {
         .qibla-page { padding-left: 8px; padding-right: 8px; }
         .qibla-head h1 { font-size: 24px; }
-        .compass-wrap { width: min(92vw, 430px); }
+        /* FIX #1 (mobile variant): same reasoning as above -- was
+           min(92vw, 430px). */
+        .compass-wrap { width: min(100%, 430px); }
         .bearing-value { font-size: 30px; }
         .metric-value { font-size: 23px; }
         .live-row { align-items: flex-start; }
@@ -502,9 +521,6 @@
 
         var heading = pendingHeading;
 
-        /* Rotate the compass face so North tracks the phone. */
-        setRotation(dial, dialState, -heading);
-
         /*
          * Qibla direction relative to the phone.
          * Example: if Qibla is 270° and phone faces 250°,
@@ -513,6 +529,12 @@
         var qiblaRelative = delta(BEARING, heading);
         var error = Math.abs(qiblaRelative);
 
+        // FIX #3: this lock check now runs BEFORE either element's rotation
+        // is applied, and returns early. Previously the dial was rotated
+        // unconditionally at the top of this function, so the compass rose
+        // kept visibly moving on every sensor sample even after "locking" --
+        // only the Qibla marker itself froze. Now, once locked, nothing
+        // rotates at all until the phone actually turns away past LOCK_EXIT.
         if (locked) {
             if (error > LOCK_EXIT) {
                 locked = false;
@@ -526,6 +548,8 @@
             }
         }
 
+        /* Rotate the compass face so North tracks the phone. */
+        setRotation(dial, dialState, -heading);
         setRotation(target, targetState, qiblaRelative);
 
         if (!locked && error <= LOCK_ENTER) {
