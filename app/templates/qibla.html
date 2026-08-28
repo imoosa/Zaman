@@ -1,707 +1,293 @@
 {% extends "base.html" %}
 {% block title %}Qibla Direction{% endblock %}
 {% block content %}
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
 <style>
-    .qibla-page {
-        max-width: 760px;
-        margin: 0 auto;
-        padding: 18px 14px 34px;
-    }
+  .qb-card{
+    background:#0a0e14; color:#e6edf3; border-radius:16px; padding:28px 20px 32px;
+    max-width:420px; margin:0 auto; text-align:center; position:relative; overflow:hidden;
+    box-shadow:0 0 0 1px #1c2530, 0 20px 60px rgba(0,0,0,.45);
+    background-image:
+      linear-gradient(#131a22 1px, transparent 1px),
+      linear-gradient(90deg, #131a22 1px, transparent 1px);
+    background-size:18px 18px;
+    background-position:center;
+  }
+  .qb-card::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(circle at 50% 20%, rgba(0,229,199,.08), transparent 60%);
+    pointer-events:none;
+  }
+  .qb-eyebrow{
+    font-family:"IBM Plex Mono",monospace; font-size:11px; letter-spacing:.28em;
+    color:#4fd8c4; text-transform:uppercase; margin:0 0 6px;
+  }
+  .qb-title{
+    font-family:"Space Grotesk",sans-serif; font-weight:600; font-size:24px;
+    letter-spacing:.01em; margin:0 0 4px; color:#f2f6f9;
+  }
+  .qb-location{
+    font-family:"IBM Plex Mono",monospace; font-size:13px; color:#7d8b99; margin:0 0 18px;
+  }
+  .qb-warning{
+    background:#1a1408; border:1px solid #4a3a12; color:#d4af6a;
+    border-radius:8px; padding:10px 14px; text-align:left; font-size:13px;
+    line-height:1.5; margin:0 0 18px; position:relative; z-index:1;
+  }
+  .qb-warning a{ color:#f0cf88; text-decoration:underline; }
 
-    .qibla-head {
-        text-align: center;
-        margin-bottom: 14px;
-    }
+  .qb-compass-wrap{ position:relative; width:240px; height:240px; margin:8px auto 22px; z-index:1; }
+  .qb-sweep{
+    position:absolute; inset:0; border-radius:50%;
+    background:conic-gradient(from 0deg, rgba(0,229,199,.16), transparent 22%);
+    animation:qb-spin 6s linear infinite; opacity:.5;
+  }
+  @keyframes qb-spin{ to{ transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce){ .qb-sweep{ animation:none; } }
 
-    .qibla-head h1 {
-        margin: 0;
-        font-size: 28px;
-        font-weight: 700;
-    }
+  .qb-readout{
+    display:flex; justify-content:center; gap:28px; margin:0 0 16px; position:relative; z-index:1;
+  }
+  .qb-readout-item{ text-align:left; }
+  .qb-readout-label{
+    font-family:"IBM Plex Mono",monospace; font-size:10px; letter-spacing:.14em;
+    color:#5b6b7a; text-transform:uppercase; margin:0 0 2px;
+  }
+  .qb-readout-value{
+    font-family:"IBM Plex Mono",monospace; font-size:22px; font-weight:600; color:#f2f6f9;
+  }
+  .qb-readout-value.gold{ color:#d4af6a; }
 
-    .qibla-head .sub {
-        margin: 5px 0 0;
-        opacity: .7;
-    }
+  .qb-btn{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; letter-spacing:.06em;
+    background:transparent; border:1px solid #2a3644; color:#9fb3c2;
+    padding:9px 16px; border-radius:8px; cursor:pointer; display:none;
+    transition:border-color .15s, color .15s;
+  }
+  .qb-btn:hover{ border-color:#00e5c7; color:#00e5c7; }
+  .qb-btn.is-live{ border-color:#00e5c7; color:#00e5c7; }
 
-    .qibla-warning {
-        margin: 12px 0 18px;
-        padding: 11px 14px;
-        border-radius: 12px;
-        background: #fff8e1;
-        border: 1px solid #ffe08a;
-        text-align: left;
-    }
+  .qb-status{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:#5b6b7a;
+    min-height:16px; margin:10px 0 0; display:flex; align-items:center;
+    justify-content:center; gap:6px; position:relative; z-index:1;
+  }
+  .qb-dot{ width:6px; height:6px; border-radius:50%; background:#3a4757; flex:none; }
+  .qb-dot.is-live{ background:#00e5c7; box-shadow:0 0 6px #00e5c7; animation:qb-pulse 1.4s ease-in-out infinite; }
+  @keyframes qb-pulse{ 50%{ opacity:.4; } }
 
-    .compass-card {
-        position: relative;
-        overflow: hidden;
-        border-radius: 26px;
-        padding: 20px 12px 18px;
-        background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.018));
-        border: 1px solid rgba(255,255,255,.10);
-        box-shadow: 0 16px 45px rgba(0,0,0,.20);
-    }
-
-    /* FIX #1: was width: min(88vw, 470px). vw ignores this element's own
-       ancestor padding (.qibla-page + .compass-card both eat horizontal
-       space), so on many phone widths the box was wider than the room
-       .compass-card actually had for it -- and since .compass-card clips
-       overflow, the circle got sliced off. Sizing off 100% (the parent's
-       own content box) instead of the viewport makes it physically
-       impossible to exceed the space that's clipping it. */
-    .compass-wrap {
-        width: min(100%, 470px);
-        aspect-ratio: 1;
-        margin: 0 auto;
-        position: relative;
-    }
-
-    #qibla-svg {
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
-
-    /* FIX #2: pin the rotation pivot for the compass rose explicitly to the
-       viewBox center (150,150). Without this, the browser's default
-       transform-origin for an SVG <g> is not guaranteed to match the
-       visual center of the circle, so rotating it could swing the needle
-       and N/E/S/W labels away from the center instead of spinning in
-       place. */
-    #qibla-dial {
-        transform-origin: 150px 150px;
-    }
-
-    /* Qibla target rotates with the live phone heading.
-       It is independent of the compass dial so it can settle precisely on Qibla.
-       Sized to match the compass face exactly (not a fixed px box) so the
-       marker orbits the rim proportionally at any screen size, same as the
-       N/E/S/W letters drawn in the SVG. */
-    .qibla-target {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 100%;
-        height: 100%;
-        transform: rotate(0deg);
-        transform-origin: 50% 50%;
-        z-index: 8;
-        pointer-events: none;
-    }
-
-    .qibla-target .target-arrow {
-        position: absolute;
-        left: 50%;
-        top: 6%;
-        transform: translateX(-50%);
-        width: 0;
-        height: 0;
-        border-left: 9px solid transparent;
-        border-right: 9px solid transparent;
-        border-bottom: 22px solid #20d8cd;
-        filter: drop-shadow(0 0 6px rgba(32,216,205,.50));
-    }
-
-    .qibla-target .target-kaaba {
-        position: absolute;
-        left: 50%;
-        top: 13%;
-        transform: translateX(-50%);
-        width: 30px;
-        height: 30px;
-        display: grid;
-        place-items: center;
-        border-radius: 8px;
-        background: #10181c;
-        border: 2px solid #20d8cd;
-        color: #20d8cd;
-        font-size: 16px;
-        box-shadow: 0 4px 13px rgba(0,0,0,.32);
-    }
-
-    .qibla-target .target-label {
-        position: absolute;
-        left: 50%;
-        top: 23%;
-        transform: translateX(-50%);
-        color: #20d8cd;
-        font-size: 9px;
-        font-weight: 800;
-        letter-spacing: 1.2px;
-        white-space: nowrap;
-        text-shadow: 0 1px 5px rgba(0,0,0,.7);
-    }
-
-    .qibla-target.qibla-locked .target-kaaba {
-        background: #16302c;
-        border-color: #6bffef;
-        box-shadow: 0 0 0 4px rgba(107,255,239,.20);
-    }
-
-    .qibla-target.qibla-locked .target-arrow {
-        border-bottom-color: #6bffef;
-    }
-
-    .qibla-target.qibla-locked {
-        animation: qibla-lock-pulse 1.6s ease-in-out infinite;
-    }
-
-    @keyframes qibla-lock-pulse {
-        0%, 100% { filter: drop-shadow(0 0 7px rgba(107,255,239,.55)); }
-        50%      { filter: drop-shadow(0 0 15px rgba(107,255,239,.9)); }
-    }
-
-    .bearing-panel {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        max-width: 620px;
-        margin: 12px auto 0;
-        border-radius: 18px;
-        border: 1px solid rgba(255,255,255,.10);
-        overflow: hidden;
-        background: rgba(255,255,255,.035);
-    }
-
-    .metric {
-        padding: 18px 12px;
-        text-align: center;
-    }
-
-    .metric + .metric {
-        border-left: 1px solid rgba(255,255,255,.10);
-    }
-
-    .metric-title {
-        font-size: 12px;
-        letter-spacing: 1.4px;
-        text-transform: uppercase;
-        opacity: .62;
-    }
-
-    .bearing-value {
-        margin: 3px 0 0;
-        font-size: 36px;
-        line-height: 1.1;
-        font-weight: 800;
-        color: #20d8cd;
-    }
-
-    .metric-value {
-        margin: 6px 0 0;
-        font-size: 27px;
-        font-weight: 750;
-    }
-
-    .metric-note {
-        margin: 4px 0 0;
-        opacity: .65;
-        font-size: 13px;
-    }
-
-    .live-card {
-        max-width: 620px;
-        margin: 14px auto 0;
-        padding: 15px 16px;
-        border-radius: 17px;
-        border: 1px solid rgba(255,255,255,.10);
-        background: rgba(255,255,255,.035);
-    }
-
-    .live-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-    }
-
-    .live-title {
-        font-size: 17px;
-        font-weight: 700;
-    }
-
-    .live-note {
-        margin: 3px 0 0;
-        opacity: .62;
-        font-size: 13px;
-    }
-
-    #qibla-live-btn {
-        white-space: nowrap;
-        border-radius: 11px;
-        padding: 9px 14px;
-    }
-
-    .qibla-status {
-        min-height: 18px;
-        margin: 9px 0 0;
-        text-align: center;
-        color: #20d8cd;
-        font-size: 13px;
-    }
-
-    .direction-hint {
-        max-width: 560px;
-        margin: 15px auto 0;
-        text-align: center;
-        line-height: 1.5;
-        opacity: .68;
-        font-size: 13px;
-    }
-
-    .google-qibla {
-        display: block;
-        max-width: 620px;
-        margin: 18px auto 0;
-        padding: 12px 16px;
-        text-align: center;
-        text-decoration: none;
-        border-radius: 12px;
-        background: #20bdb4;
-        color: #071416;
-        font-weight: 700;
-        border: 1px solid rgba(32,216,205,.35);
-    }
-
-    @media (max-width: 560px) {
-        .qibla-page { padding-left: 8px; padding-right: 8px; }
-        .qibla-head h1 { font-size: 24px; }
-        /* FIX #1 (mobile variant): same reasoning as above -- was
-           min(92vw, 430px). */
-        .compass-wrap { width: min(100%, 430px); }
-        .bearing-value { font-size: 30px; }
-        .metric-value { font-size: 23px; }
-        .live-row { align-items: flex-start; }
-    }
+  .qb-static-note{
+    font-family:"IBM Plex Mono",monospace; font-size:12px; color:#5b6b7a;
+    margin:14px 0 0; position:relative; z-index:1;
+  }
 </style>
 
-<div class="qibla-page">
-    <div class="qibla-head">
-        <h1>Qibla Direction</h1>
-        <p class="sub">{{ location_name }}</p>
+<div class="qb-card">
+  <p class="qb-eyebrow">Qibla instrument</p>
+  <h1 class="qb-title">Direction to Mecca</h1>
+
+  {% if location_is_default %}
+  <p class="qb-warning">
+    This bearing is for <strong>{{ location_name }}</strong> (default) — it may not be your
+    location. <a href="{{ url_for('settings_view') }}">Set your location</a> for an accurate direction.
+  </p>
+  {% endif %}
+  <p class="qb-location">{{ location_name }}</p>
+
+  <div class="qb-compass-wrap">
+    <div class="qb-sweep" aria-hidden="true"></div>
+    <svg id="qibla-svg" viewBox="0 0 240 240" width="240" height="240" role="img" aria-label="Compass showing the qibla bearing">
+      <circle cx="120" cy="120" r="112" fill="none" stroke="#1c2530" stroke-width="1"/>
+      <circle cx="120" cy="120" r="95" fill="none" stroke="#1c2530" stroke-width="1"/>
+
+      <g id="qibla-ticks"></g>
+
+      <g id="qibla-dial">
+        <text x="120" y="34" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="15" font-weight="600" fill="#e6edf3">N</text>
+        <text x="206" y="125" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#7d8b99">E</text>
+        <text x="120" y="216" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#7d8b99">S</text>
+        <text x="34" y="125" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="13" fill="#7d8b99">W</text>
+      </g>
+
+      <g id="qibla-needle" transform="rotate({{ bearing }} 120 120)">
+        <line x1="120" y1="120" x2="120" y2="40" stroke="#00e5c7" stroke-width="2.5"/>
+        <polygon points="120,28 111,50 129,50" fill="#00e5c7"/>
+        <circle cx="120" cy="36" r="9" fill="none" stroke="#d4af6a" stroke-width="2"/>
+        <rect x="115" y="31" width="10" height="10" fill="#d4af6a" opacity=".9"/>
+      </g>
+
+      <circle cx="120" cy="120" r="5" fill="#0a0e14" stroke="#00e5c7" stroke-width="2"/>
+    </svg>
+  </div>
+
+  <div class="qb-readout">
+    <div class="qb-readout-item">
+      <p class="qb-readout-label">Bearing</p>
+      <p class="qb-readout-value">{{ bearing }}&deg;</p>
     </div>
-
-    {% if location_is_default %}
-    <div class="qibla-warning">
-        This bearing is for <strong>{{ location_name }}</strong> (default) -- it may not be your
-        location. <a href="{{ url_for('settings_view') }}">Set your location</a> for an accurate direction.
+    <div class="qb-readout-item">
+      <p class="qb-readout-label">Distance</p>
+      <p class="qb-readout-value gold">{{ distance_km }} km</p>
     </div>
-    {% endif %}
+  </div>
 
-    <div class="compass-card">
-        <div class="compass-wrap">
-            <svg id="qibla-svg" viewBox="0 0 300 300" aria-label="Qibla compass">
-                <defs>
-                    <radialGradient id="housing" cx="50%" cy="42%" r="62%">
-                        <stop offset="0%" stop-color="#29343a"/>
-                        <stop offset="72%" stop-color="#12191d"/>
-                        <stop offset="100%" stop-color="#080b0d"/>
-                    </radialGradient>
-                    <radialGradient id="dialFace" cx="50%" cy="45%" r="58%">
-                        <stop offset="0%" stop-color="#243a42"/>
-                        <stop offset="100%" stop-color="#10171b"/>
-                    </radialGradient>
-                    <linearGradient id="needleFill" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stop-color="#35e4d7"/>
-                        <stop offset="100%" stop-color="#159e98"/>
-                    </linearGradient>
-                </defs>
-
-                <circle cx="150" cy="150" r="143" fill="url(#housing)" stroke="rgba(255,255,255,.14)" stroke-width="2"/>
-                <circle cx="150" cy="150" r="130" fill="none" stroke="rgba(32,216,205,.28)" stroke-width="3"/>
-                <circle cx="150" cy="150" r="120" fill="url(#dialFace)" stroke="rgba(255,255,255,.12)" stroke-width="2"/>
-
-                <g id="qibla-ticks" stroke="rgba(255,255,255,.58)" stroke-width="1"></g>
-
-                <!-- Only the compass card rotates. This keeps the Qibla screen marker locked. -->
-                <g id="qibla-dial">
-                    <circle cx="150" cy="150" r="105" fill="none" stroke="rgba(255,255,255,.08)" stroke-width="1"/>
-                    <text x="150" y="69" text-anchor="middle" font-size="20" font-weight="700" fill="#f4ffff">N</text>
-                    <text x="233" y="156" text-anchor="middle" font-size="17" font-weight="700" fill="#f4ffff">E</text>
-                    <text x="150" y="241" text-anchor="middle" font-size="17" font-weight="700" fill="#f4ffff">S</text>
-                    <text x="67" y="156" text-anchor="middle" font-size="17" font-weight="700" fill="#f4ffff">W</text>
-
-                    <text x="211" y="93" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.50)">NE</text>
-                    <text x="211" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.50)">SE</text>
-                    <text x="89" y="218" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.50)">SW</text>
-                    <text x="89" y="93" text-anchor="middle" font-size="10" fill="rgba(255,255,255,.50)">NW</text>
-
-                    <!-- Fixed compass rose, no animated Qibla needle. -->
-                    <polygon points="150,86 157,143 150,150 143,143" fill="#59656d" opacity=".9"/>
-                    <polygon points="214,150 157,157 150,150 157,143" fill="#59656d" opacity=".9"/>
-                    <polygon points="150,214 143,157 150,150 157,157" fill="#59656d" opacity=".9"/>
-                    <polygon points="86,150 143,143 150,150 143,157" fill="#59656d" opacity=".9"/>
-                    <circle cx="150" cy="150" r="10" fill="#10171b" stroke="#8b969d" stroke-width="3"/>
-                    <circle cx="150" cy="150" r="4" fill="#20d8cd"/>
-                </g>
-
-                <!-- Small top heading marker stays fixed to the screen. -->
-                <polygon points="150,27 143,42 157,42" fill="#20d8cd"/>
-            </svg>
-
-            <div id="qibla-target" class="qibla-target" aria-label="Qibla direction">
-                <span class="target-arrow"></span>
-                <span class="target-kaaba">▣</span>
-                <span class="target-label">QIBLA</span>
-            </div>
-        </div>
-
-        <div class="bearing-panel">
-            <div class="metric">
-                <div class="metric-title">Qibla Bearing</div>
-                <div class="bearing-value">{{ bearing }}&deg;</div>
-                <div class="metric-note">from True North</div>
-            </div>
-            <div class="metric">
-                <div class="metric-title">Distance to Mecca</div>
-                <div class="metric-value">{{ distance_km }} km</div>
-                <div class="metric-note">Mecca, Saudi Arabia</div>
-            </div>
-        </div>
-
-        <div class="live-card">
-            <div class="live-row">
-                <div>
-                    <div class="live-title">Live Compass</div>
-                    <div class="live-note">Keep the phone flat and rotate slowly.</div>
-                </div>
-                <button type="button" id="qibla-live-btn" class="btn-secondary" style="display:none;">
-                    🧭 Turn on
-                </button>
-            </div>
-            <p id="qibla-live-status" class="qibla-status"></p>
-        </div>
-
-        <p id="qibla-static-note" class="direction-hint">
-            The Qibla arrow rotates with your phone. It locks and glows once you're facing Qibla.
-        </p>
-
-        <a class="google-qibla"
-           href="https://www.google.com/search?q=Qibla+finder"
-           target="_blank" rel="noopener">
-            View Google Qibla Finder
-        </a>
-    </div>
+  <button type="button" id="qibla-live-btn" class="qb-btn">Enable live compass</button>
+  <p id="qibla-live-status" class="qb-status"><span class="qb-dot" id="qibla-dot"></span><span id="qibla-status-text"></span></p>
+  <p id="qibla-static-note" class="qb-static-note">Point the top of your phone toward north to align the marker.</p>
 </div>
 
 <script>
 (function(){
     var BEARING = {{ bearing }};
+    // Magnetic declination in degrees at this location (true = magnetic + declination,
+    // east-positive convention). Pass this from the server if you have it -- e.g. from
+    // a WMM/IGRF calculation keyed to the same lat/lon used for the bearing itself.
+    // Left at 0 this compass is magnetic-north-referenced, which can be off from the
+    // server's true-north bearing by several degrees depending on location.
+    var DECLINATION = {{ declination|default(0) }};
+
     var dial = document.getElementById('qibla-dial');
-    var target = document.getElementById('qibla-target');
+    var needle = document.getElementById('qibla-needle');
+    var ticks = document.getElementById('qibla-ticks');
     var liveBtn = document.getElementById('qibla-live-btn');
     var liveStatus = document.getElementById('qibla-live-status');
+    var statusText = document.getElementById('qibla-status-text');
+    var statusDot = document.getElementById('qibla-dot');
     var staticNote = document.getElementById('qibla-static-note');
 
     var live = false;
-    var sx = null, sy = null;
-    var locked = false;
-    var rafHandle = null;
-    var pendingHeading = null;
 
-    // Unwrapped rotation state per element. "normalized" stays in 0-360 so we
-    // can measure the shortest angular step; "unwrapped" grows/shrinks freely
-    // so the CSS transform never has to jump across the 0/360 boundary
-    // (that jump was the visible "spin/shake" — the browser has no idea
-    // 359deg -> 1deg is a 2deg move, it animates the long way around).
-    var dialState = { normalized: null, unwrapped: 0 };
-    var targetState = { normalized: null, unwrapped: 0 };
+    function norm(deg){ return ((deg % 360) + 360) % 360; }
 
-    function norm(deg){
-        return ((deg % 360) + 360) % 360;
-    }
-
-    function delta(a, b){
-        return ((a - b + 540) % 360) - 180;
-    }
-
-    /* Single low-pass filter on the compass heading itself (vector average).
-       No second degree-based clamp on top of this — stacking two filters
-       with different time constants is what produced the oscillation. */
-    var SMOOTHING = 0.15;
-
-    // Hysteresis lock: enter lock inside 3 deg, only release past 6 deg.
-    // Without this gap, sensor noise around a single threshold makes the
-    // arrow flicker in and out of "aligned" forever — never actually resting.
-    var LOCK_ENTER = 3.0;
-    var LOCK_EXIT = 6.0;
-
-    function smooth(rawHeading){
-        var rad = rawHeading * Math.PI / 180;
-        var nx = Math.sin(rad);
-        var ny = Math.cos(rad);
-
-        if (sx === null) {
-            sx = nx;
-            sy = ny;
-        } else {
-            sx += (nx - sx) * SMOOTHING;
-            sy += (ny - sy) * SMOOTHING;
-        }
-
-        return norm(Math.atan2(sx, sy) * 180 / Math.PI);
-    }
-
-    function setRotation(element, state, wantedDeg){
-        var wantedNorm = norm(wantedDeg);
-
-        if (state.normalized === null) {
-            state.normalized = wantedNorm;
-            state.unwrapped = wantedNorm;
-        } else {
-            var d = delta(wantedNorm, state.normalized);
-            state.normalized = norm(state.normalized + d);
-            state.unwrapped += d;
-        }
-
-        element.style.transform = 'rotate(' + state.unwrapped.toFixed(2) + 'deg)';
-    }
-
-    function snapLocked(){
-        // Pin exactly to "pointing up" and freeze — nearest multiple of 360
-        // to whatever the current unwrapped value is, so there's no visible
-        // jump when we snap.
-        targetState.unwrapped = Math.round(targetState.unwrapped / 360) * 360;
-        targetState.normalized = 0;
-        target.style.transform = 'rotate(' + targetState.unwrapped.toFixed(2) + 'deg)';
-    }
-
-    function resetToStatic(){
-        dial.removeAttribute('transform');
-        dial.style.transform = '';
-
-        if (target) {
-            target.style.transform = 'rotate(0deg)';
-            target.classList.remove('qibla-locked');
-        }
-
-        sx = sy = null;
-        locked = false;
-        dialState = { normalized: null, unwrapped: 0 };
-        targetState = { normalized: null, unwrapped: 0 };
-
-        if (rafHandle !== null) {
-            cancelAnimationFrame(rafHandle);
-            rafHandle = null;
-        }
-        pendingHeading = null;
-    }
-
-    /* Draw the 5-degree compass scale once. */
+    // Draw a fine degree ring: minor ticks every 5deg, major (labeled) every 30deg.
     (function drawTicks(){
-        var ticks = document.getElementById('qibla-ticks');
-        if (!ticks) return;
-
-        for (var i = 0; i < 72; i++) {
-            var a = i * 5 * Math.PI / 180;
-            var outer = 116;
-            var inner = (i % 3 === 0) ? 107 : 111;
-
-            var x1 = 150 + Math.sin(a) * inner;
-            var y1 = 150 - Math.cos(a) * inner;
-            var x2 = 150 + Math.sin(a) * outer;
-            var y2 = 150 - Math.cos(a) * outer;
-
-            var line = document.createElementNS(
-                'http://www.w3.org/2000/svg',
-                'line'
-            );
-
-            line.setAttribute('x1', x1.toFixed(2));
-            line.setAttribute('y1', y1.toFixed(2));
-            line.setAttribute('x2', x2.toFixed(2));
-            line.setAttribute('y2', y2.toFixed(2));
+        var svgns = 'http://www.w3.org/2000/svg';
+        for (var d = 0; d < 360; d += 5){
+            var major = d % 30 === 0;
+            var r1 = major ? 100 : 105;
+            var r2 = 112;
+            var rad = (d - 90) * Math.PI / 180;
+            var x1 = 120 + r1 * Math.cos(rad), y1 = 120 + r1 * Math.sin(rad);
+            var x2 = 120 + r2 * Math.cos(rad), y2 = 120 + r2 * Math.sin(rad);
+            var line = document.createElementNS(svgns, 'line');
+            line.setAttribute('x1', x1.toFixed(2)); line.setAttribute('y1', y1.toFixed(2));
+            line.setAttribute('x2', x2.toFixed(2)); line.setAttribute('y2', y2.toFixed(2));
+            line.setAttribute('stroke', major ? '#3a4757' : '#20293380');
+            line.setAttribute('stroke-width', major ? '1.4' : '1');
             ticks.appendChild(line);
         }
     })();
 
-    function renderFrame(){
-        rafHandle = null;
-        if (pendingHeading === null) return;
-
-        var heading = pendingHeading;
-
-        /*
-         * Qibla direction relative to the phone.
-         * Example: if Qibla is 270° and phone faces 250°,
-         * the Qibla pointer needs to point 20° clockwise from screen-up.
-         */
-        var qiblaRelative = delta(BEARING, heading);
-        var error = Math.abs(qiblaRelative);
-
-        // FIX #3: this lock check now runs BEFORE either element's rotation
-        // is applied, and returns early. Previously the dial was rotated
-        // unconditionally at the top of this function, so the compass rose
-        // kept visibly moving on every sensor sample even after "locking" --
-        // only the Qibla marker itself froze. Now, once locked, nothing
-        // rotates at all until the phone actually turns away past LOCK_EXIT.
-        if (locked) {
-            if (error > LOCK_EXIT) {
-                locked = false;
-                target.classList.remove('qibla-locked');
-            } else {
-                // Stay frozen exactly on target — do not re-rotate on every
-                // tiny sensor wobble. This is the actual "lock".
-                liveStatus.textContent =
-                    '✓ Qibla locked — you are facing Mecca.';
-                return;
-            }
+    // Raw sensor readings jitter by several degrees between events -- this smooths
+    // them out. Averaging angles directly breaks at the 0/360 wraparound (359 and 1
+    // would average to 180, the opposite direction), so we average sin/cos parts instead.
+    var SMOOTHING = 0.15;
+    var sx = null, sy = null;
+    function smooth(rawHeading){
+        var rad = rawHeading * Math.PI / 180;
+        var nx = Math.sin(rad), ny = Math.cos(rad);
+        if (sx === null) { sx = nx; sy = ny; }
+        else {
+            sx += (nx - sx) * SMOOTHING;
+            sy += (ny - sy) * SMOOTHING;
         }
-
-        /* Rotate the compass face so North tracks the phone. */
-        setRotation(dial, dialState, -heading);
-        setRotation(target, targetState, qiblaRelative);
-
-        if (!locked && error <= LOCK_ENTER) {
-            locked = true;
-            target.classList.add('qibla-locked');
-            snapLocked();
-            liveStatus.textContent =
-                '✓ Qibla locked — you are facing Mecca.';
-        } else {
-            liveStatus.textContent =
-                'Facing ' + heading.toFixed(0) +
-                '° — rotate until the arrow locks.';
-        }
+        return norm(Math.atan2(sx, sy) * 180 / Math.PI);
     }
 
-    /*
-     * Plain `360 - alpha` only gives a correct heading when the phone is
-     * lying flat on a table. Held upright — the normal way anyone actually
-     * uses a Qibla compass — alpha alone becomes close to gimbal-locked and
-     * swings wildly on tiny wrist tilts (the "here and there" jumpiness).
-     * This combines alpha, beta and gamma into a proper tilt-compensated
-     * heading, the same approach browsers use internally for
-     * webkitCompassHeading on iOS.
-     */
+    // Tilt-compensated heading from the raw device-orientation Euler angles.
+    // Plain alpha (used by many qibla-style widgets) only works with the phone held
+    // flat; as soon as it's tilted toward your face -- the normal way to check a
+    // compass -- the reading skews. This applies the standard rotation-matrix fix.
     function tiltCompensatedHeading(alpha, beta, gamma){
-        var aRad = alpha * Math.PI / 180;
-        var bRad = beta * Math.PI / 180;
-        var gRad = gamma * Math.PI / 180;
-
-        var cA = Math.cos(aRad), sA = Math.sin(aRad);
-        var cB = Math.cos(bRad), sB = Math.sin(bRad);
-        var cG = Math.cos(gRad), sG = Math.sin(gRad);
-
+        var aR = alpha * Math.PI / 180, bR = beta * Math.PI / 180, gR = gamma * Math.PI / 180;
+        var cA = Math.cos(aR), sA = Math.sin(aR);
+        var cB = Math.cos(bR), sB = Math.sin(bR);
+        var cG = Math.cos(gR), sG = Math.sin(gR);
         var rA = -cA * sG - sA * sB * cG;
         var rB = -sA * sG + cA * sB * cG;
+        return norm(Math.atan2(rA, rB) * 180 / Math.PI);
+    }
 
-        var heading = Math.atan2(rA, rB) * 180 / Math.PI;
-        if (heading < 0) heading += 360;
-
-        return heading;
+    function resetToStatic(){
+        needle.setAttribute('transform', 'rotate(' + BEARING + ' 120 120)');
+        dial.removeAttribute('transform');
+        sx = sy = null;
     }
 
     var handler = function(e){
-        var raw = null;
-
+        var rawMagnetic = null;
         if (typeof e.webkitCompassHeading === 'number') {
-            // iOS already gives a true, tilt-compensated compass heading.
-            raw = e.webkitCompassHeading;
-        } else if (typeof e.alpha === 'number' &&
-                   typeof e.beta === 'number' &&
-                   typeof e.gamma === 'number') {
-            raw = tiltCompensatedHeading(e.alpha, e.beta, e.gamma);
+            rawMagnetic = e.webkitCompassHeading; // iOS -- magnetic heading, tilt-compensated by the OS
+        } else if (typeof e.alpha === 'number' && typeof e.beta === 'number' && typeof e.gamma === 'number') {
+            rawMagnetic = tiltCompensatedHeading(e.alpha, e.beta, e.gamma); // Android
         }
+        if (rawMagnetic === null) return;
 
-        if (raw === null || !isFinite(raw)) return;
+        var rawTrue = norm(rawMagnetic + DECLINATION);
+        var heading = smooth(rawTrue);
 
-        pendingHeading = smooth(norm(raw));
-
-        // Batch to one DOM write per animation frame. Device orientation
-        // events can fire far faster than the screen refresh rate — writing
-        // a new transform on every single one is what caused overlapping,
-        // conflicting paint updates (visible as shake) on top of the
-        // 0/360 wrap bug.
-        if (rafHandle === null) {
-            rafHandle = requestAnimationFrame(renderFrame);
-        }
+        // The dial (N/E/S/W + tick ring) rotates opposite the phone's heading, like a
+        // real compass housing. The needle is fixed to the dial at its true bearing.
+        var dialRotation = norm(-heading);
+        var needleRotation = norm(BEARING - heading);
+        dial.setAttribute('transform', 'rotate(' + dialRotation.toFixed(2) + ' 120 120)');
+        ticks.setAttribute('transform', 'rotate(' + dialRotation.toFixed(2) + ' 120 120)');
+        needle.setAttribute('transform', 'rotate(' + needleRotation.toFixed(2) + ' 120 120)');
+        statusText.textContent = 'Facing ' + heading.toFixed(1) + '\u00b0 true \u2014 rotate until the marker points up.';
     };
 
     function startLive(){
-        if (live) return;
-
-        window.addEventListener(
-            'deviceorientationabsolute',
-            handler,
-            true
-        );
-
-        window.addEventListener(
-            'deviceorientation',
-            handler,
-            true
-        );
-
+        window.addEventListener('deviceorientationabsolute', handler, true);
+        window.addEventListener('deviceorientation', handler, true);
         live = true;
-        liveBtn.style.display = '';
-        liveBtn.textContent = '⏸ Turn off';
+        liveBtn.textContent = 'Disable live compass';
+        liveBtn.classList.add('is-live');
+        statusDot.classList.add('is-live');
         staticNote.style.display = 'none';
-        liveStatus.textContent =
-            'Live compass active — rotate until the Qibla arrow points up.';
+        statusText.textContent = 'Move your phone in a figure-8 once if the reading looks off, to calibrate its sensor.';
     }
 
     function stopLive(){
-        window.removeEventListener(
-            'deviceorientationabsolute',
-            handler,
-            true
-        );
-
-        window.removeEventListener(
-            'deviceorientation',
-            handler,
-            true
-        );
-
+        window.removeEventListener('deviceorientationabsolute', handler, true);
+        window.removeEventListener('deviceorientation', handler, true);
         live = false;
-        liveBtn.textContent = '🧭 Turn on';
+        liveBtn.textContent = 'Enable live compass';
+        liveBtn.classList.remove('is-live');
+        statusDot.classList.remove('is-live');
         staticNote.style.display = '';
-        liveStatus.textContent = '';
+        statusText.textContent = '';
         resetToStatic();
     }
 
     function requestIOSPermission(){
+        // iOS 13+ Safari -- Apple requires this call to happen synchronously inside a
+        // real user gesture (a click). It can't be triggered from page-load code;
+        // that's an OS-level restriction, not a bug here.
         DeviceOrientationEvent.requestPermission().then(function(state){
-            if (state === 'granted') {
-                startLive();
-            } else {
-                liveStatus.textContent =
-                    'Compass access was not allowed. You can retry below.';
-            }
+            if (state === 'granted') startLive();
+            else statusText.textContent = 'Compass access was not allowed. You can retry below.';
         }).catch(function(err){
-            liveStatus.textContent =
-                'Compass access failed: ' +
-                (err && err.message ? err.message : err);
+            statusText.textContent = 'Compass access failed: ' + (err && err.message ? err.message : err);
         });
     }
 
     liveBtn.addEventListener('click', function(){
-        if (live) {
-            stopLive();
-            return;
-        }
-
-        if (typeof DeviceOrientationEvent !== 'undefined' &&
-            typeof DeviceOrientationEvent.requestPermission === 'function') {
-            requestIOSPermission();
-        } else {
-            startLive();
-        }
+        if (live){ stopLive(); return; }
+        requestIOSPermission();
     });
 
     (function autoInit(){
         if (typeof DeviceOrientationEvent === 'undefined') {
-            return;
+            return; // no sensor support -- stay on the static bearing
         }
-
         if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-            liveBtn.style.display = '';
-            liveStatus.textContent =
-                'Tap Turn on to enable the live compass.';
+            liveBtn.style.display = 'inline-block';
+            statusText.textContent = 'Tap below to enable the live compass.';
             return;
         }
-
+        liveBtn.style.display = 'inline-block';
         startLive();
     })();
 })();
