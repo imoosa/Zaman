@@ -25,6 +25,9 @@
 </head>
 <body>
     <header class="topbar">
+        <span class="brand">
+            <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="brand-icon">
+        </span>
         <span class="liturgical-badge" title="Christian liturgical season, sets today's accent color"><span class="dot"></span>{{ liturgical_season_name }}</span>
         <nav class="menu">
             <a href="{{ url_for('today_view') }}" class="{{ 'active' if active == 'today' else '' }}">

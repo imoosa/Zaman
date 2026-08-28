@@ -210,9 +210,6 @@
   }
   .today-btn:hover{background:#f7f5f2}
 
-  .calendar-brand-row{display:flex;justify-content:center;padding:6px 0 2px;}
-  .calendar-brand-icon{height:44px;width:44px;display:block;}
-
   /* Layout: main grid + detail column side by side on wide screens,
      stacked on narrow ones. This assumes .calendar-wrap is a flex/grid
      parent set in base.html -- if it isn't, this rule has nothing to
@@ -220,9 +217,20 @@
   @media (min-width:900px){
     .calendar-wrap{display:grid;grid-template-columns:1fr 320px;gap:var(--sp-6);align-items:start}
   }
-  @media (max-width:640px){
+  @media (max-width:900px) {
     .modal-box{padding:var(--sp-5)}
-    .calendar-toolbar{gap:var(--sp-2);padding:var(--sp-3) var(--sp-4) var(--sp-2);}
+    .calendar-toolbar{
+      flex-direction:column;
+      align-items:stretch;
+      gap:var(--sp-2);
+      padding:var(--sp-3) var(--sp-4) var(--sp-2);
+    }
+    .calendar-toolbar .toolbar-note-btn,
+    .calendar-toolbar .today-btn{ text-align:center; }
+    .calendar-toolbar .goto-date-inline{
+      justify-content:stretch;
+    }
+    .calendar-toolbar .goto-date-inline input[type="date"]{ flex:1 1 auto; min-width:0; }
   }
 </style>
 
@@ -241,12 +249,6 @@
                  them, tell me and I'll pass today's hijri/gregorian values
                  explicitly instead. -->
             <a class="today-btn" href="{{ url_for('calendar_view', cal=cal) }}">Today</a>
-        </div>
-
-        <!-- Brand mark moved down here from the topbar, sitting right below
-             the toolbar and above the month header. -->
-        <div class="calendar-brand-row">
-            <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="Zaman" class="calendar-brand-icon">
         </div>
 
         <div class="calendar-nav">

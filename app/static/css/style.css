@@ -484,10 +484,23 @@ form button:hover { opacity: 0.9; }
   /* Room at the bottom of the page so content doesn't sit under the
      fixed tab bar, and lift the sticky note above it too. */
   .main-content { padding: 12px 12px calc(72px + env(safe-area-inset-bottom)); }
-  /* The floating sticky-note widget (and its "+ Note" reopen pill) sits
-     at a hardcoded bottom-right position that collides with the fixed
-     bottom tab bar on mobile. The toolbar's own "Note" button on
-     calendar.html already opens this same note, so it's safe to just
-     hide the floating copy on small screens instead of relocating it. */
-  .notes-widget, .note-reopen-btn { display: none !important; }
+
+  /* The floating sticky-note widget defaults to a 230px card fixed at
+     bottom-right, which collides with the fixed bottom tab bar on
+     mobile. Forcing it to display:none !important here used to also
+     defeat calendar.html's toolbar "Note" button, which calls
+     window.openStickyNote() to reopen this exact widget -- that JS only
+     toggles the inner card's inline style, so an !important on the
+     outer .notes-widget always won it and the button did nothing.
+     Instead: keep it under JS control, just resize/reposition it so it
+     no longer overlaps the tab bar. */
+  .notes-widget {
+    width: min(230px, calc(100vw - 32px));
+    right: 16px;
+    bottom: calc(16px + 60px + env(safe-area-inset-bottom));
+  }
+  .note-reopen-btn {
+    right: 16px;
+    bottom: calc(16px + 60px + env(safe-area-inset-bottom));
+  }
 }
