@@ -195,20 +195,43 @@
     transition:opacity .15s ease;
   }
   .goto-date-inline button:hover{opacity:.88}
-  .toolbar-note-btn{
+  .toolbar-btn{
     border:1px solid var(--line);border-radius:var(--radius-sm);
     padding:var(--sp-2) var(--sp-3);font-size:12.5px;font-weight:600;line-height:1.4;
-    background:#fff;color:var(--ink);cursor:pointer;
+    background:#fff;color:var(--ink);cursor:pointer;text-decoration:none;
+    display:inline-flex;align-items:center;justify-content:center;height:34px;
     transition:background .15s ease;
   }
-  .toolbar-note-btn:hover{background:#f7f5f2}
+  .toolbar-btn:hover{background:#f7f5f2}
   .today-btn{
     border:1px solid var(--line);border-radius:var(--radius-sm);
     padding:var(--sp-2) var(--sp-3);font-size:12.5px;font-weight:600;line-height:1.4;
     color:var(--ink);text-decoration:none;display:inline-flex;align-items:center;
+    justify-content:center;height:34px;
     transition:background .15s ease;
   }
   .today-btn:hover{background:#f7f5f2}
+  /* Toolbar controls were mixing content-box defaults with the padding/height
+     above, which is what made the date input, Go button and Today link line
+     up unevenly -- forcing border-box on all of them so padding/height are
+     measured the same way fixes the misalignment. */
+  .calendar-toolbar, .calendar-toolbar *{box-sizing:border-box}
+  .goto-date-inline input[type="date"]{height:34px}
+  .goto-date-inline button{height:34px;display:inline-flex;align-items:center;justify-content:center}
+
+  /* Qibla shortcut sits right next to the location text now, instead of
+     living only in the top nav -- small square icon button, location text
+     shrunk down since it's a secondary label here, not a heading. */
+  .location-line{display:flex;align-items:center;justify-content:center;gap:var(--sp-2)}
+  .qibla-mini-btn{
+    flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border:1px solid var(--line);border-radius:6px;
+    color:var(--bohra);text-decoration:none;
+    transition:background .15s ease,border-color .15s ease;
+  }
+  .qibla-mini-btn:hover{background:#f7f5f2;border-color:var(--bohra)}
+  .qibla-mini-icon{width:13px;height:13px}
+  .location-text{font-size:11px;color:var(--muted)}
 
   /* Layout: main grid + detail column side by side on wide screens,
      stacked on narrow ones. This assumes .calendar-wrap is a flex/grid
@@ -225,7 +248,7 @@
       gap:var(--sp-2);
       padding:var(--sp-3) var(--sp-4) var(--sp-2);
     }
-    .calendar-toolbar .toolbar-note-btn,
+    .calendar-toolbar .toolbar-btn,
     .calendar-toolbar .today-btn{ text-align:center; }
     .calendar-toolbar .goto-date-inline{
       justify-content:stretch;
@@ -237,7 +260,7 @@
 <div class="calendar-wrap">
     <div class="calendar-main">
         <div class="calendar-toolbar">
-            <button type="button" class="toolbar-note-btn" onclick="if(window.openStickyNote) window.openStickyNote();">&#128221; Note</button>
+            <a href="{{ url_for('events_view') }}" class="toolbar-btn">&#128197; Events</a>
             <form method="get" action="{{ url_for('calendar_view') }}" class="goto-date-inline">
                 <input type="hidden" name="cal" value="{{ cal }}">
                 <input type="date" name="goto" id="goto-date-input" aria-label="Go to date">
@@ -319,10 +342,10 @@
             <div><span class="label">maghrib</span><span class="value">{{ prayer.maghrib }}</span></div>
         </div>
         <div class="location-line">
-            {{ location_name }}
-            {% if location_is_default %}
-            &middot; <a href="{{ url_for('settings_view') }}">this is a default -- set your real location</a>
-            {% endif %}
+            <a href="{{ url_for('qibla_view') }}" class="qibla-mini-btn" title="Qibla direction" aria-label="Qibla direction">
+                <svg class="qibla-mini-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+            </a>
+            <span class="location-text">{{ location_name }}</span>
         </div>
             {% elif cal == 'hindu' and hindu_daily %}
         <div class="ritual-panel-intro">

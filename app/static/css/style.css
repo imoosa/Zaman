@@ -75,7 +75,7 @@ body {
 }
 
 .brand { font-weight: 700; font-size: 1.05rem; color: var(--bohra-red); white-space: nowrap; display: flex; align-items: center; gap: 8px; }
-.brand-icon { height: 44px; width: auto; display: block; }
+.brand-icon { height: 52px; width: auto; display: block; }
 .menu-brand { display: none; }
 
 .menu { display: flex; gap: 4px; flex-wrap: wrap; }
@@ -430,7 +430,7 @@ form button:hover { opacity: 0.9; }
     position: relative;
   }
   .brand { font-size: 0.92rem; }
-  .brand-icon { height: 34px; }
+  .brand-icon { height: 42px; }
 
   /* Hamburger removed entirely -- nav is always visible as a bottom bar. */
   .menu-toggle-checkbox, .menu-toggle-label { display: none !important; }
