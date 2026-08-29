@@ -345,6 +345,7 @@
             <a href="{{ url_for('qibla_view') }}" class="qibla-mini-btn" title="Qibla direction" aria-label="Qibla direction">
                 <svg class="qibla-mini-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76">QIBLA</polygon></svg>
             </a>
+            <span> | </span>
             <span class="location-text">{{ location_name }}</span>
         </div>
             {% elif cal == 'hindu' and hindu_daily %}
