@@ -224,13 +224,14 @@
      shrunk down since it's a secondary label here, not a heading. */
   .location-line{display:flex;align-items:center;justify-content:center;gap:var(--sp-2)}
   .qibla-mini-btn{
-    flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
-    width:22px;height:22px;border:1px solid var(--line);border-radius:6px;
+    flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;gap:4px;
+    height:22px;padding:0 6px;border:1px solid var(--line);border-radius:6px;
     color:var(--bohra);text-decoration:none;
     transition:background .15s ease,border-color .15s ease;
   }
   .qibla-mini-btn:hover{background:#f7f5f2;border-color:var(--bohra)}
-  .qibla-mini-icon{width:13px;height:13px}
+  .qibla-mini-label{font-size:9px;font-weight:700;letter-spacing:.04em}
+  .qibla-mini-icon{width:13px;height:13px;flex:0 0 auto}
   .location-text{font-size:11px;color:var(--muted)}
 
   /* Layout: main grid + detail column side by side on wide screens,
@@ -343,10 +344,9 @@
         </div>
         <div class="location-line">
             <a href="{{ url_for('qibla_view') }}" class="qibla-mini-btn" title="Qibla direction" aria-label="Qibla direction">
-                <svg class="qibla-mini-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
                 <span class="qibla-mini-label">QIBLA</span>
+                <svg class="qibla-mini-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
             </a>
-            <span> | </span>
             <span class="location-text">{{ location_name }}</span>
         </div>
             {% elif cal == 'hindu' and hindu_daily %}
