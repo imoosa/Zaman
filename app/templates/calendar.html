@@ -144,6 +144,17 @@
   .hindu-day-dot{position:absolute;top:4px;right:4px;width:7px;height:7px;border-radius:50%;}
   .hindu-day-dot.ekadashi{background:#8e44ad;}
   .hindu-day-dot.purnima{background:#e67e22;}
+  .calendar-grid td.selected-day > a{outline:2px solid var(--bohra);outline-offset:-2px;border-radius:6px;}
+
+  .day-detail-panel{
+    border:1px solid var(--line);border-radius:var(--radius-md);background:#fff;
+    padding:var(--sp-4) var(--sp-5);margin-top:var(--sp-4);
+  }
+  .day-detail-panel[hidden]{display:none}
+  .day-detail-panel h4{margin:0 0 var(--sp-3) 0;font-size:14px}
+  .day-detail-empty{color:var(--muted);font-size:13px}
+  .day-detail-event{display:flex;align-items:center;gap:8px;padding:var(--sp-2) 0;border-bottom:1px solid var(--line);font-size:13px}
+  .day-detail-event:last-child{border-bottom:none;padding-bottom:0}
 
   /* Hindu daily panel + timeline -- shown below the grid only when cal == 'hindu',
      same slot the hijri/sunni/shia prayer-strip uses below. Hebrew/Parsi
@@ -178,11 +189,16 @@
 
   /* Compact header row: month nav + go-to-date, now that the sidebar is gone */
   .calendar-toolbar{
-    display:flex;align-items:center;justify-content:flex-start;gap:var(--sp-3);
+    display:flex;align-items:center;justify-content:space-between;gap:var(--sp-3);
     flex-wrap:wrap;
     padding:var(--sp-4) var(--sp-5) var(--sp-3);
     border-bottom:1px solid var(--line);
   }
+  /* Events + Today grouped so the go-to-date form (variable width) can
+     wrap onto its own line without ever splitting these two apart --
+     previously all three were siblings in one flex row, so the form
+     landing between them could push Today onto a second line alone. */
+  .toolbar-actions{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:nowrap}
   .goto-date-inline{display:flex;align-items:center;gap:var(--sp-2)}
   .goto-date-inline input[type="date"]{
     border:1px solid var(--line);border-radius:var(--radius-sm);
@@ -261,18 +277,20 @@
 <div class="calendar-wrap">
     <div class="calendar-main">
         <div class="calendar-toolbar">
-            <a href="{{ url_for('events_view') }}" class="toolbar-btn">&#128197; Events</a>
+            <div class="toolbar-actions">
+                <a href="{{ url_for('events_view') }}" class="toolbar-btn">&#128197; Events</a>
+                <!-- [guessing] jumps back to today by requesting the view with no
+                     y/m/day -- this assumes calendar_view() defaults to today's
+                     date when those params are absent. If it actually requires
+                     them, tell me and I'll pass today's hijri/gregorian values
+                     explicitly instead. -->
+                <a class="today-btn" href="{{ url_for('calendar_view', cal=cal) }}">Today</a>
+            </div>
             <form method="get" action="{{ url_for('calendar_view') }}" class="goto-date-inline">
                 <input type="hidden" name="cal" value="{{ cal }}">
                 <input type="date" name="goto" id="goto-date-input" aria-label="Go to date">
                 <button type="submit">Go</button>
             </form>
-            <!-- [guessing] jumps back to today by requesting the view with no
-                 y/m/day -- this assumes calendar_view() defaults to today's
-                 date when those params are absent. If it actually requires
-                 them, tell me and I'll pass today's hijri/gregorian values
-                 explicitly instead. -->
-            <a class="today-btn" href="{{ url_for('calendar_view', cal=cal) }}">Today</a>
         </div>
 
         <div class="calendar-nav">
@@ -299,7 +317,12 @@
                     {% for day in week %}
                         {% if day %}
                         <td class="{{ 'today' if day.is_today else '' }} {{ 'has-event' if day.events or day.interfaith or day.personal else '' }}">
-                            <a href="{{ url_for('calendar_view', cal=cal, y=hijri_year, m=hijri_month, day=day.hijri_day) }}">
+                            {% set combined = [] %}
+                            {% for e in day.events %}{% set _ = combined.append({'title': e.title, 'cls': e.event_source or 'bohra', 'color': e.color}) %}{% endfor %}
+                            {% for e in day.interfaith %}{% set _ = combined.append({'title': e.title, 'cls': e.tradition, 'color': e.color}) %}{% endfor %}
+                            {% for e in day.personal %}{% set _ = combined.append({'title': e.title, 'cls': 'personal', 'color': e.color}) %}{% endfor %}
+                            <a href="{{ url_for('calendar_view', cal=cal, y=hijri_year, m=hijri_month, day=day.hijri_day) }}"
+                               class="day-link" data-events='{{ combined | tojson }}'>
                                 {% if day.is_ekadashi %}<span class="hindu-day-dot ekadashi" title="Ekadashi"></span>{% endif %}
                                 {% if day.is_purnima %}<span class="hindu-day-dot purnima" title="Purnima"></span>{% endif %}
                                 {% if cal == 'gregorian' %}
@@ -312,10 +335,6 @@
                                 <div class="greg-num">{{ day.greg_day }}</div>
                                 {% endif %}
                                 <div class="event-pills">
-                                    {% set combined = [] %}
-                                    {% for e in day.events %}{% set _ = combined.append({'title': e.title, 'cls': e.event_source or 'bohra', 'color': e.color}) %}{% endfor %}
-                                    {% for e in day.interfaith %}{% set _ = combined.append({'title': e.title, 'cls': e.tradition, 'color': e.color}) %}{% endfor %}
-                                    {% for e in day.personal %}{% set _ = combined.append({'title': e.title, 'cls': 'personal', 'color': e.color}) %}{% endfor %}
                                     {% for e in combined[:2] %}
                                     <span class="pill pill-{{ e.cls }}" title="{{ e.title }}"
                                           {% if e.color and e.color.startswith('#') %}style="background:{{ e.color }};color:#fff;"{% endif %}>{{ e.title }}</span>
@@ -334,6 +353,20 @@
                 {% endfor %}
             </tbody>
         </table>
+
+        <!-- Client-side only, deliberately: clicking a day used to do a full
+             navigation to a `day=` URL param that nothing here renders (see
+             note above where the old select-a-day panel used to live). This
+             reuses the pill data already embedded per-cell instead of adding
+             a server round trip, so it works for any day visible in the
+             CURRENTLY open month -- crossing months still needs the nav
+             arrows or Go-to-date box, since only one month's cells exist
+             in the DOM at a time. -->
+        <div id="day-detail-panel" class="day-detail-panel" hidden>
+            <h4 id="day-detail-title"></h4>
+            <div id="day-detail-events"></div>
+        </div>
+
             {% if cal in ['hijri', 'sunni', 'shia'] %}
         <div class="prayer-strip">
             <div><span class="label">Fajr</span><span class="value">{{ prayer.fajr }}</span></div>
@@ -553,6 +586,55 @@
 
 {% set add_event_redirect = 'calendar' %}
 {% include "add_events.html" %}
+<script>
+(function(){
+    var panel = document.getElementById('day-detail-panel');
+    var titleEl = document.getElementById('day-detail-title');
+    var listEl = document.getElementById('day-detail-events');
+    var grid = document.querySelector('.calendar-grid');
+    if (!grid || !panel) return;
+
+    grid.addEventListener('click', function(ev){
+        var link = ev.target.closest('a.day-link');
+        if (!link) return;
+        ev.preventDefault();
+
+        var cell = link.closest('td');
+        grid.querySelectorAll('td.selected-day').forEach(function(td){ td.classList.remove('selected-day'); });
+        cell.classList.add('selected-day');
+
+        var numEl = link.querySelector('.hijri-num, .greg-num.solo-num, .greg-num');
+        var label = numEl ? numEl.textContent.trim() : '';
+        titleEl.textContent = label ? ('Events on ' + label) : 'Events';
+
+        var events = [];
+        try { events = JSON.parse(link.getAttribute('data-events') || '[]'); } catch (e) { events = []; }
+
+        listEl.innerHTML = '';
+        if (!events.length){
+            var empty = document.createElement('div');
+            empty.className = 'day-detail-empty';
+            empty.textContent = 'No events on this day.';
+            listEl.appendChild(empty);
+        } else {
+            events.forEach(function(e){
+                var row = document.createElement('div');
+                row.className = 'day-detail-event';
+                var dot = document.createElement('span');
+                dot.className = 'event-src-dot';
+                if (e.color && e.color.indexOf('#') === 0) dot.style.background = e.color;
+                var text = document.createElement('span');
+                text.textContent = e.title;
+                row.appendChild(dot);
+                row.appendChild(text);
+                listEl.appendChild(row);
+            });
+        }
+        panel.hidden = false;
+        panel.scrollIntoView({behavior:'smooth', block:'nearest'});
+    });
+})();
+</script>
 <script>
 (function () {
 

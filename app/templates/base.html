@@ -22,11 +22,12 @@
             display:inline-block;
         }
 
-        /* [guessing] style.css isn't available, so this can't hardcode the
-           breakpoint it uses to turn .menu into a fixed bottom tab bar.
-           Instead body.nav-bottom-fixed is set by JS from the ACTUAL computed
-           position of .menu at runtime (see syncMobileNav() below), so this
-           stays correct even if style.css's breakpoint changes later. */
+        /* [certain] style.css's `@media (max-width: 900px)` block is where
+           .menu switches to `position:fixed` and becomes the bottom tab
+           bar (confirmed by reading style.css). body.nav-bottom-fixed is
+           still set by JS from the runtime computed position as a belt-
+           and-braces check, but the media query below is now the
+           authoritative gate, not a guess. */
         .menu-brand-link{ display:none; }
         body.nav-bottom-fixed .menu-brand-link{
             display:flex; align-items:center; justify-content:center; flex:1;
@@ -35,15 +36,13 @@
 
         /* Hard gate: nav-bottom-fixed comes from a runtime layout check
            (applyMobileNavOffset() below), which is one resize/paint race
-           away from being wrong -- the screenshot is exactly that: the
+           away from being wrong -- the screenshot was exactly that: the
            class got set on a desktop-width viewport, so the round mobile
            mark showed inline in the menu instead of the normal side logo.
-           This media query is the real desktop/mobile boundary and
-           !important-overrides whatever state the JS landed on, so desktop
-           always shows the side logo + menu, never the round mark.
-           [guessing] 769px assumes style.css's own breakpoint is close to
-           this -- change it to match that breakpoint exactly if it differs. */
-        @media (min-width: 769px){
+           901px mirrors style.css's own 900px breakpoint exactly, so this
+           !important-overrides whatever state the JS lands on and desktop
+           always shows the side logo + menu, never the round mark. */
+        @media (min-width: 901px){
             .menu-brand-link{ display:none !important; }
             .topbar > .brand{ display:flex !important; align-items:center; }
         }
