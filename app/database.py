@@ -1,12 +1,33 @@
-"""SQLite storage for Bohra calendar events (misaqs, urs, eids, etc.)."""
+"""MySQL storage for Bohra calendar events (misaqs, urs, eids, etc.)."""
 
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, DateTime
+import os
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, Date, DateTime, Text
 from sqlalchemy.orm import declarative_base, sessionmaker
 from datetime import datetime
 
-DATABASE_URL = "sqlite:///./bohra_calendar.db"
+# Placeholder env vars -- fill these in on your VPS (e.g. in a systemd
+# unit's Environment= lines, or a .env file loaded before this module
+# imports). Nothing here has a real default for host/user/password/db on
+# purpose: failing loud with a clear env var name beats silently pointing
+# at nobody's database.
+DB_HOST = os.environ.get("MYSQL_HOST", "localhost")
+DB_PORT = os.environ.get("MYSQL_PORT", "3306")
+DB_USER = os.environ.get("MYSQL_USER", "bohra_calendar")
+DB_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
+DB_NAME = os.environ.get("MYSQL_DATABASE", "bohra_calendar")
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = (
+    f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    "?charset=utf8mb4"
+)
+
+# check_same_thread was SQLite-only (it doesn't exist as a pymysql connect
+# arg) -- dropped. pool_pre_ping replaces it as the thing that actually
+# matters under real traffic: MySQL silently closes idle connections after
+# a timeout (wait_timeout, default 8h but VPS configs vary), and without
+# pre_ping a worker's first query on a stale connection fails outright
+# instead of SQLAlchemy quietly reconnecting first.
+engine = create_engine(DATABASE_URL, pool_pre_ping=True, pool_recycle=3600)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 Base = declarative_base()
 
@@ -18,18 +39,18 @@ class HijriEvent(Base):
     id = Column(Integer, primary_key=True, index=True)
     hijri_month = Column(Integer, index=True)
     hijri_day = Column(Integer, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=True)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
     is_fasting_day = Column(Boolean, default=False)
     is_holiday = Column(Boolean, default=False)
-    color = Column(String, default="black")
+    color = Column(String(30), default="black")
     is_custom = Column(Boolean, default=False)
-    repeat = Column(String, default="yearly")
+    repeat = Column(String(20), default="yearly")
     hijri_year = Column(Integer, nullable=True)
     gregorian_date = Column(Date, nullable=True)
     
     # NEW: Which tradition this event belongs to
-    event_source = Column(String, default="bohra")  # 'bohra', 'sunni', 'shia'
+    event_source = Column(String(20), default="bohra")  # 'bohra', 'sunni', 'shia'
 
 
 class InterfaithEvent(Base):
@@ -41,10 +62,10 @@ class InterfaithEvent(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     event_date = Column(Date, index=True)
-    title = Column(String, nullable=False)
-    tradition = Column(String, index=True)   # 'christian' | 'french' | 'jewish' | 'hindu'
+    title = Column(String(255), nullable=False)
+    tradition = Column(String(30), index=True)   # 'christian' | 'french' | 'jewish' | 'hindu'
     is_holiday = Column(Boolean, default=False)
-    color = Column(String, default="black")
+    color = Column(String(30), default="black")
 
 
 class PersonalEvent(Base):
@@ -56,12 +77,12 @@ class PersonalEvent(Base):
     __tablename__ = "personal_events"
 
     id = Column(Integer, primary_key=True, index=True)
-    title = Column(String, nullable=False)
-    description = Column(String, nullable=True)
-    category = Column(String, default="other")     # 'birthday' | 'anniversary' | 'other'
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(30), default="other")     # 'birthday' | 'anniversary' | 'other'
     anchor_date = Column(Date, nullable=False)      # the Gregorian first/reference occurrence
-    repeat = Column(String, default="yearly")       # 'never' | 'weekly' | 'monthly' | 'yearly'
-    color = Column(String, default="personal")
+    repeat = Column(String(20), default="yearly")       # 'never' | 'weekly' | 'monthly' | 'yearly'
+    color = Column(String(30), default="personal")
 
     # Optional companion Hijri date for the same event (e.g. an anniversary
     # you want to track on both calendars). Independent of anchor_date --
@@ -75,20 +96,20 @@ class PersonalEvent(Base):
     # correctly track ONE of them -- this field says which. Ignored for
     # 'never'/'weekly'/'monthly' repeat, and irrelevant if hijri_month/day
     # aren't set (there's nothing to choose between).
-    recur_calendar = Column(String, default="gregorian")  # 'gregorian' | 'hijri'
+    recur_calendar = Column(String(20), default="gregorian")  # 'gregorian' | 'hijri'
 
     # Optional "complete info of the person" fields -- all nullable, so
     # existing rows (and anyone who leaves these blank) are unaffected.
     # These are about the PERSON the event is for, not the event itself --
     # keep that distinction if you add more fields here later.
-    person_name = Column(String, nullable=True)   # e.g. "Fatima Bhen" -- separate from `title` (e.g. "Fatima's Birthday")
-    relation = Column(String, nullable=True)       # e.g. "Sister", "Colleague"
-    phone = Column(String, nullable=True)          # free-text, no validation -- add a format check before trusting this for anything automated
+    person_name = Column(String(255), nullable=True)   # e.g. "Fatima Bhen" -- separate from `title` (e.g. "Fatima's Birthday")
+    relation = Column(String(100), nullable=True)       # e.g. "Sister", "Colleague"
+    phone = Column(String(30), nullable=True)          # free-text, no validation -- add a format check before trusting this for anything automated
 
     # Per-event ringtone override -- key into main.py's RINGTONE_OPTIONS.
     # None/blank means "use the category default from Settings"
     # (birthday_ringtone / anniversary_ringtone), not "no sound".
-    ringtone = Column(String, nullable=True)
+    ringtone = Column(String(100), nullable=True)
 
 
 class Note(Base):
@@ -99,7 +120,7 @@ class Note(Base):
     __tablename__ = "sidebar_note"
 
     id = Column(Integer, primary_key=True, index=True)
-    content = Column(String, default="")
+    content = Column(String(5000), default="")
 
 
 def get_or_create_note(db):
@@ -127,9 +148,9 @@ class CustomRingtone(Base):
     __tablename__ = "custom_ringtones"
 
     id = Column(Integer, primary_key=True, index=True)
-    key = Column(String, unique=True, nullable=False, index=True)
-    label = Column(String, nullable=False)
-    filename = Column(String, nullable=False)
+    key = Column(String(100), unique=True, nullable=False, index=True)
+    label = Column(String(255), nullable=False)
+    filename = Column(String(255), nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
 
 
