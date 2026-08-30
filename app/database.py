@@ -12,8 +12,8 @@ from datetime import datetime
 # at nobody's database.
 DB_HOST = os.environ.get("MYSQL_HOST", "localhost")
 DB_PORT = os.environ.get("MYSQL_PORT", "3306")
-DB_USER = os.environ.get("MYSQL_USER", "bohra_calendar")
-DB_PASSWORD = os.environ.get("MYSQL_PASSWORD", "")
+DB_USER = os.environ.get("MYSQL_USER", "root")
+DB_PASSWORD = os.environ.get("MYSQL_PASSWORD", "BadriKhambaty53")
 DB_NAME = os.environ.get("MYSQL_DATABASE", "bohra_calendar")
 
 DATABASE_URL = (
