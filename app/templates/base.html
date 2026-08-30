@@ -33,6 +33,21 @@
         }
         body.nav-bottom-fixed .topbar > .brand{ display:none; }
 
+        /* Hard gate: nav-bottom-fixed comes from a runtime layout check
+           (applyMobileNavOffset() below), which is one resize/paint race
+           away from being wrong -- the screenshot is exactly that: the
+           class got set on a desktop-width viewport, so the round mobile
+           mark showed inline in the menu instead of the normal side logo.
+           This media query is the real desktop/mobile boundary and
+           !important-overrides whatever state the JS landed on, so desktop
+           always shows the side logo + menu, never the round mark.
+           [guessing] 769px assumes style.css's own breakpoint is close to
+           this -- change it to match that breakpoint exactly if it differs. */
+        @media (min-width: 769px){
+            .menu-brand-link{ display:none !important; }
+            .topbar > .brand{ display:flex !important; align-items:center; }
+        }
+
         /* Redundant once the logo itself links to Calendar in mobile mode --
            kept for desktop, where the topbar logo and this nav list are two
            separate, smaller elements and the label still earns its space. */
