@@ -85,9 +85,71 @@
                 0 0 16px 3px rgba(160,160,160,.65),
                 inset 0 0 6px rgba(255,255,255,1);
         }
+
+        /* Opening/splash screen -- mobile only (matches style.css's real
+           900px breakpoint, same one used above for the logo fix). Desktop
+           never sees this: display:none outside the media query, and the
+           JS below removes the node outright on wide viewports too, so it
+           can never flash on screen there even for a frame. */
+        .app-splash{ display:none; }
+        @media (max-width: 900px){
+            .app-splash{
+                display:flex; align-items:center; justify-content:center;
+                position:fixed; inset:0; z-index:1000;
+                background:#fff;
+                transition:opacity .35s ease;
+            }
+            .app-splash.app-splash-hide{ opacity:0; pointer-events:none; }
+            .app-splash-logo{
+                width:100px; height:100px; object-fit:contain;
+                /* Bounce IN once (overshoot then settle), then hand off to
+                   a slower, gentler idle bounce that loops until the splash
+                   is dismissed -- the two animations are named separately
+                   so the idle loop can't restart the overshoot each cycle. */
+                animation:
+                    app-splash-bounce-in .7s cubic-bezier(.34,1.56,.64,1) both,
+                    app-splash-idle-bounce 1.2s ease-in-out .7s infinite;
+            }
+            @keyframes app-splash-bounce-in{
+                0%  { transform:scale(.3) translateY(50px); opacity:0; }
+                55% { transform:scale(1.1) translateY(-10px); opacity:1; }
+                75% { transform:scale(.95) translateY(4px); }
+                100%{ transform:scale(1) translateY(0); }
+            }
+            @keyframes app-splash-idle-bounce{
+                0%, 100% { transform:translateY(0); }
+                50%      { transform:translateY(-12px); }
+            }
+            @media (prefers-reduced-motion: reduce){
+                .app-splash-logo{ animation:none; }
+            }
+        }
     </style>
 </head>
 <body>
+    <div id="app-splash" class="app-splash" aria-hidden="true">
+        <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="" class="app-splash-logo">
+    </div>
+    <script>
+        // Runs before the rest of the page paints, so the splash is the
+        // first thing visible on mobile with no flash-of-content. Gated
+        // two ways: viewport width (CSS already hides it on desktop, this
+        // just skips the JS/sessionStorage work there too) and
+        // sessionStorage, so a multi-page nav click doesn't replay it --
+        // it's an "app open" moment, not a per-page one.
+        (function(){
+            var splash = document.getElementById('app-splash');
+            if (!splash) return;
+            if (window.innerWidth > 900){ splash.remove(); return; }
+            var SHOWN_KEY = 'app-splash-shown';
+            if (sessionStorage.getItem(SHOWN_KEY)){ splash.remove(); return; }
+            sessionStorage.setItem(SHOWN_KEY, '1');
+            setTimeout(function(){
+                splash.classList.add('app-splash-hide');
+                setTimeout(function(){ splash.remove(); }, 350);
+            }, 1800);
+        })();
+    </script>
     <header class="topbar">
         <span class="brand">
             <a href="{{ url_for('calendar_view') }}" title="Calendar">
