@@ -137,6 +137,20 @@
         {% for m in messages %}
         <div class="flash">{{ m }}</div>
         {% endfor %}
+        <style>
+            /* Auto-dismiss: fade starts at 1.6s so the message is fully gone
+               by the 2s mark, not 2s-then-fade (which would overshoot it). */
+            .flash{ transition: opacity .4s ease, transform .4s ease; }
+            .flash.flash-hide{ opacity:0; transform:translateY(-6px); pointer-events:none; }
+        </style>
+        <script>
+            document.querySelectorAll('.flash').forEach(function(el){
+                setTimeout(function(){
+                    el.classList.add('flash-hide');
+                    setTimeout(function(){ el.remove(); }, 400);
+                }, 1600);
+            });
+        </script>
       {% endif %}
     {% endwith %}
 
