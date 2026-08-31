@@ -73,10 +73,19 @@ class PersonalEvent(Base):
     anything else that isn't a Bohra or interfaith date. Stored as a single
     Gregorian anchor date plus a repeat rule; individual occurrences are
     computed on the fly by personal_events.py rather than one row per year,
-    so "repeat every year forever" doesn't need pre-generated rows."""
+    so "repeat every year forever" doesn't need pre-generated rows.
+
+    device_id scopes ownership -- the same samaa_device_id cookie/header
+    used for AdLocationProfile (see main.py's _load_device_id). Nullable
+    because rows created before this column existed have no owner; those
+    are treated as legacy/shared in get_personal_by_date (visible to
+    everyone, same as today) rather than becoming invisible to everyone
+    the moment this ships. Every row created from here on always gets a
+    device_id and is private to that device."""
     __tablename__ = "personal_events"
 
     id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(36), nullable=True, index=True)
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
     category = Column(String(30), default="other")     # 'birthday' | 'anniversary' | 'other'

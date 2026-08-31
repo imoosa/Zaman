@@ -29,6 +29,7 @@ from .database import (
 import calendar as _pycal
 from html.parser import HTMLParser
 from html import escape as _escape
+from sqlalchemy import or_
 
 # Tags the sticky-note toolbar can actually produce (bold + bullet lists,
 # plus the div/br/p wrapper tags contenteditable inserts on its own).
@@ -367,6 +368,20 @@ def create_app():
 
     @app.before_request
     def _load_device_id():
+        """Resolves the device identity used to scope AdLocationProfile
+        and PersonalEvent rows. Two paths, both land in g.device_id:
+        - Native Android app: sends X-Device-Id header (a UUID it
+          generates once and persists itself -- cookies aren't reliably
+          persisted by a plain HTTP client the way they are in a browser
+          or WebView, so this app must NOT rely on Set-Cookie).
+        - Browser / WebView: falls back to the samaa_device_id cookie,
+          generated here on first visit if absent.
+        Header always wins when both are present."""
+        header_id = request.headers.get("X-Device-Id")
+        if header_id:
+            g.device_id = header_id
+            g.device_id_is_new = False
+            return
         g.device_id = request.cookies.get(DEVICE_COOKIE_NAME)
         g.device_id_is_new = g.device_id is None
         if g.device_id_is_new:
@@ -607,9 +622,20 @@ def create_app():
         )
 
     def get_personal_by_date(start_g, end_g):
+        """Every personal-event read path (calendar view, daily widgets,
+        events tab) goes through this one function -- scoping it here
+        scopes all of them at once. Rows with device_id IS NULL are
+        pre-migration legacy rows with no recorded owner; they stay
+        visible to everyone (unchanged behavior) rather than vanishing
+        for their original owner the moment this ships. Every row
+        created after this change always has a device_id and is private."""
         db = get_session()
         try:
-            rows = db.query(PersonalEvent).all()
+            rows = (
+                db.query(PersonalEvent)
+                .filter(or_(PersonalEvent.device_id == g.device_id, PersonalEvent.device_id.is_(None)))
+                .all()
+            )
             by_date = {}
             for r in rows:
                 for occ in pe.event_occurrences_in_range(r, start_g, end_g):
@@ -1656,6 +1682,7 @@ def create_app():
                         raise ValueError("Add a Hijri date before choosing to recur by it.")
 
                     p = PersonalEvent(
+                        device_id=g.device_id,
                         title=request.form["title"],
                         description=request.form.get("description") or None,
                         category=request.form.get("category", "other"),
@@ -1757,6 +1784,7 @@ def create_app():
             if tab == "personal":
                 personal_events = (
                     db.query(PersonalEvent)
+                    .filter(or_(PersonalEvent.device_id == g.device_id, PersonalEvent.device_id.is_(None)))
                     .order_by(PersonalEvent.anchor_date)
                     .all()
                 )
@@ -1794,13 +1822,27 @@ def create_app():
 
     @app.post("/personal-events/<int:event_id>/delete")
     def delete_personal_event(event_id):
+        """Deletion is allowed for the owning device, or for legacy rows
+        with no recorded owner (device_id IS NULL) -- same reasoning as
+        the read-path filter above. A row owned by a *different* device
+        is treated as not found, not a 403 -- doesn't confirm to a
+        stranger that the ID belongs to someone else's private event."""
         db = get_session()
         try:
-            e = db.query(PersonalEvent).filter(PersonalEvent.id == event_id).first()
+            e = (
+                db.query(PersonalEvent)
+                .filter(
+                    PersonalEvent.id == event_id,
+                    or_(PersonalEvent.device_id == g.device_id, PersonalEvent.device_id.is_(None)),
+                )
+                .first()
+            )
             if e:
                 db.delete(e)
                 db.commit()
                 flash(f"Deleted: {e.title}")
+            else:
+                flash("Event not found.")
         finally:
             db.close()
         return redirect(url_for("events_view", tab="personal"))
@@ -1984,15 +2026,91 @@ def create_app():
         return jsonify({"bearing_degrees": round(qb.bearing_to_kaaba(lat, lng), 2),
                          "distance_km": round(qb.distance_km(lat, lng), 1)})
 
+    @app.get("/api/mobile/personal-events")
+    def api_mobile_list_personal_events():
+        """Private to the calling device -- requires X-Device-Id (see
+        _load_device_id). No cookie fallback here on purpose: this is a
+        fresh mobile-only surface, so every caller is expected to send
+        its own persisted UUID rather than relying on a browser cookie
+        that a native HTTP client won't reliably keep anyway."""
+        db = get_session()
+        try:
+            rows = (
+                db.query(PersonalEvent)
+                .filter(PersonalEvent.device_id == g.device_id)
+                .order_by(PersonalEvent.anchor_date)
+                .all()
+            )
+            return jsonify([{
+                "id": r.id, "title": r.title, "description": r.description,
+                "category": r.category, "anchor_date": r.anchor_date.isoformat(),
+                "repeat": r.repeat, "color": r.color,
+                "hijri_month": r.hijri_month, "hijri_day": r.hijri_day,
+                "recur_calendar": r.recur_calendar,
+                "person_name": r.person_name, "relation": r.relation,
+            } for r in rows])
+        finally:
+            db.close()
+
+    @app.post("/api/mobile/personal-events")
+    def api_mobile_add_personal_event():
+        body = request.get_json(force=True, silent=True) or {}
+        missing = [k for k in ["title", "anchor_date"] if k not in body]
+        if missing:
+            raise ValueError(f"missing fields: {', '.join(missing)}")
+        repeat = body.get("repeat", "yearly")
+        if repeat not in pe.VALID_REPEATS:
+            raise ValueError("repeat must be one of: never, weekly, monthly, yearly")
+        recur_calendar = body.get("recur_calendar", "gregorian")
+        if recur_calendar not in pe.VALID_RECUR_CALENDARS:
+            raise ValueError("recur_calendar must be 'gregorian' or 'hijri'")
+
+        db = get_session()
+        try:
+            p = PersonalEvent(
+                device_id=g.device_id,
+                title=body["title"],
+                description=body.get("description"),
+                category=body.get("category", "other"),
+                anchor_date=date.fromisoformat(body["anchor_date"]),
+                repeat=repeat,
+                color=body.get("color", "personal"),
+                hijri_month=body.get("hijri_month"),
+                hijri_day=body.get("hijri_day"),
+                recur_calendar=recur_calendar,
+                person_name=body.get("person_name"),
+                relation=body.get("relation"),
+            )
+            db.add(p)
+            db.commit()
+            new_id = p.id
+        finally:
+            db.close()
+        return jsonify({"id": new_id, "status": "created"}), 201
+
+    @app.post("/api/mobile/personal-events/<int:event_id>/delete")
+    def api_mobile_delete_personal_event(event_id):
+        db = get_session()
+        try:
+            e = (
+                db.query(PersonalEvent)
+                .filter(PersonalEvent.id == event_id, PersonalEvent.device_id == g.device_id)
+                .first()
+            )
+            if e is None:
+                return jsonify({"error": "not found"}), 404
+            db.delete(e)
+            db.commit()
+        finally:
+            db.close()
+        return jsonify({"status": "deleted"})
+
     @app.get("/api/mobile/events")
     def api_mobile_events():
         """Stateless endpoint for the Flutter app. Returns ONLY shared/general
         data -- Hijri (Bohra/Sunni/Shia), interfaith, and prayer times for a
-        date range. Deliberately excludes PersonalEvent: that table has no
-        per-user scoping (see database.py's Note docstring -- this whole app
-        is single-tenant), so serving it here would leak one person's
-        birthdays to every phone that opens the app. Personal events live
-        entirely on-device in Flutter -- see below."""
+        date range. Deliberately excludes PersonalEvent -- use
+        /api/mobile/personal-events (device-scoped) for that instead."""
         start_str = request.args.get("start")
         end_str = request.args.get("end")
         today_g = date.today()
