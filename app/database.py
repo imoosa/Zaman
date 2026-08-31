@@ -14,7 +14,7 @@ DB_HOST = os.environ.get("MYSQL_HOST", "localhost")
 DB_PORT = os.environ.get("MYSQL_PORT", "3306")
 DB_USER = os.environ.get("MYSQL_USER", "root")
 DB_PASSWORD = os.environ.get("MYSQL_PASSWORD", "BadriKhambaty53")
-DB_NAME = os.environ.get("MYSQL_DATABASE", "bohra_calendar")
+DB_NAME = os.environ.get("MYSQL_DATABASE", "zamaan")
 
 DATABASE_URL = (
     f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
@@ -152,6 +152,27 @@ class CustomRingtone(Base):
     label = Column(String(255), nullable=False)
     filename = Column(String(255), nullable=False)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AdLocationProfile(Base):
+    """Persistent, cookie-keyed record of a visitor's location + default
+    calendar -- written alongside (not instead of) the Flask session, so
+    there's an actual queryable row for ad targeting. Session data alone
+    is per-browser and can't be aggregated ("all visitors near X"); this
+    table is what makes that possible. Keyed by a long-lived random cookie
+    (samaa_device_id, set in main.py's before/after_request hooks), not
+    the internal auto-increment `id` -- same enumeration reasoning as
+    before: `id` is never accepted as a lookup key or exposed to the client."""
+    __tablename__ = "ad_location_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    device_id = Column(String(36), unique=True, nullable=False, index=True)
+    location_name = Column(String(120), nullable=True)
+    lat = Column(String(30), nullable=True)
+    lng = Column(String(30), nullable=True)
+    default_calendar = Column(String(20), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
 def init_db():

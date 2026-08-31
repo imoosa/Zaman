@@ -2,7 +2,7 @@ import os
 import uuid
 from datetime import date, datetime, timedelta
 
-from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash
+from flask import Flask, request, jsonify, render_template, session, redirect, url_for, flash, g
 from flask_cors import CORS
 from werkzeug.utils import secure_filename
 
@@ -23,7 +23,7 @@ from . import shia_calendar as shc
 from .database import (
     get_session, init_db, seed_if_empty, seed_missing_sources, refresh_seeded_events, HijriEvent,
     InterfaithEvent, PersonalEvent, Note, get_or_create_note, refresh_interfaith_events,
-    CustomRingtone,
+    CustomRingtone, AdLocationProfile,
 )
 
 import calendar as _pycal
@@ -356,6 +356,50 @@ def create_app():
     this_year = date.today().year
     refresh_interfaith_events(this_year - 1, this_year + 3)
 
+    # ---------- persistent device cookie, for ad-targeting rows ----------
+    # Deliberately separate from the Flask session cookie: the session is
+    # short-lived/per-browser-instance and its data isn't queryable in
+    # aggregate. This cookie is long-lived (~2 years) and only ever used
+    # as the key for AdLocationProfile rows -- ad targeting needs an
+    # identifier that survives session expiry and a real table to query.
+    DEVICE_COOKIE_NAME = "samaa_device_id"
+    DEVICE_COOKIE_MAX_AGE = 60 * 60 * 24 * 730
+
+    @app.before_request
+    def _load_device_id():
+        g.device_id = request.cookies.get(DEVICE_COOKIE_NAME)
+        g.device_id_is_new = g.device_id is None
+        if g.device_id_is_new:
+            g.device_id = str(uuid.uuid4())
+
+    @app.after_request
+    def _persist_device_id(response):
+        if getattr(g, "device_id_is_new", False):
+            response.set_cookie(
+                DEVICE_COOKIE_NAME, g.device_id, max_age=DEVICE_COOKIE_MAX_AGE,
+                httponly=True, samesite="Lax",
+            )
+        return response
+
+    def _upsert_ad_location_profile(location_name, lat, lng, default_calendar):
+        """Writes/updates the queryable AdLocationProfile row for the
+        current device. Called from onboarding_submit and settings_view's
+        POST -- anywhere location or default_calendar changes -- so the
+        ad-targeting table stays current without duplicating this logic."""
+        db = get_session()
+        try:
+            row = db.query(AdLocationProfile).filter_by(device_id=g.device_id).first()
+            if row is None:
+                row = AdLocationProfile(device_id=g.device_id)
+                db.add(row)
+            row.location_name = location_name
+            row.lat = lat
+            row.lng = lng
+            row.default_calendar = default_calendar
+            db.commit()
+        finally:
+            db.close()
+
     # ---------- sidebar sticky note (shown on every page) ----------
     @app.context_processor
     def inject_sidebar_note():
@@ -387,6 +431,16 @@ def create_app():
         if cal_key not in CALENDARS:
             cal_key = "hijri"
         return dict(cal_key=cal_key)
+
+    @app.context_processor
+    def inject_needs_onboarding():
+        """base.html's mobile onboarding overlay needs to know, on every
+        page, whether this session has completed the first-run
+        location/calendar form yet. A separate flag rather than inferring
+        from missing session['location'] -- so a returning user is never
+        re-gated just because DEFAULT_LOCATION happens to satisfy
+        current_location()."""
+        return dict(needs_onboarding="onboarded" not in session)
 
     @app.context_processor
     def inject_ringtone_options():
@@ -1393,6 +1447,36 @@ def create_app():
                                 distance_km=distance, location_name=loc["name"],
                                 location_is_default=location_is_default())
 
+    @app.route("/onboarding", methods=["POST"])
+    def onboarding_submit():
+        """First-run mobile form (base.html's #app-onboarding overlay):
+        location + default_calendar only. Merges default_calendar into
+        session['preferences'] rather than replacing the whole dict --
+        unlike settings_view's POST, which intentionally rebuilds prefs
+        from scratch -- so this never resets toggles a returning user may
+        already have set before their session flag lapsed."""
+        try:
+            session["location"] = {
+                "name": request.form["location_name"],
+                "lat": float(request.form["lat"]),
+                "lng": float(request.form["lng"]),
+                "tz_offset": float(request.form["tz_offset"]),
+            }
+            default_calendar = request.form.get("default_calendar", "hijri")
+            if default_calendar not in CALENDARS:
+                raise ValueError("invalid default_calendar")
+            prefs = session.get("preferences", {})
+            prefs["default_calendar"] = default_calendar
+            session["preferences"] = prefs
+            session["onboarded"] = True
+            _upsert_ad_location_profile(
+                session["location"]["name"], session["location"]["lat"],
+                session["location"]["lng"], default_calendar,
+            )
+        except (KeyError, ValueError):
+            return jsonify({"error": "Please fill in all fields with valid values."}), 400
+        return jsonify({"status": "ok"})
+
     @app.route("/settings", methods=["GET", "POST"])
     def settings_view():
         if request.method == "POST":
@@ -1435,6 +1519,10 @@ def create_app():
                     if request.form.get("anniversary_ringtone") in valid_ringtones else "bells"
                 )
                 session["preferences"] = prefs
+                _upsert_ad_location_profile(
+                    new_loc["name"], new_loc["lat"], new_loc["lng"],
+                    prefs["default_calendar"],
+                )
                 flash("Settings updated.")
                 return redirect(url_for("calendar_view"))
             except (KeyError, ValueError):

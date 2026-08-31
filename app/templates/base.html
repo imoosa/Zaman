@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Samaa Calendar{% endblock %}</title>
+    <!-- Reuses the same logo file already used for the topbar/splash --
+         no separate favicon asset needed. apple-touch-icon covers the
+         "Add to Home Screen" icon on iOS; the plain icon link covers the
+         browser tab everywhere else (Android/Chrome pull their home-screen
+         icon from manifest.json if you add one later, not from this tag). -->
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <style>
         /* Liturgical Theme Engine -- today's Christian liturgical season sets
@@ -124,12 +131,78 @@
                 .app-splash-logo{ animation:none; }
             }
         }
+
+        /* Onboarding gate -- mobile only, same breakpoint as the splash.
+           Sits above it (z-index 1001 vs 1000) so if both are present at
+           once the onboarding card wins, not the logo bounce underneath it. */
+        .app-onboarding{ display:none; }
+        @media (max-width: 900px){
+            .app-onboarding{
+                display:flex; align-items:center; justify-content:center;
+                position:fixed; inset:0; z-index:1001;
+                background:rgba(0,0,0,.55); padding:20px;
+            }
+            .onboarding-card{
+                background:#fff; border-radius:14px; padding:24px 20px;
+                width:100%; max-width:360px; text-align:center;
+            }
+            .onboarding-logo{ width:56px; height:56px; object-fit:contain; margin-bottom:10px; }
+            .onboarding-hint{ font-size:13px; color:#666; margin:0 0 16px; }
+            .app-onboarding .field{ text-align:left; margin-bottom:12px; }
+            .app-onboarding label{ display:block; font-size:12.5px; font-weight:600; margin-bottom:4px; }
+            .app-onboarding input, .app-onboarding select{
+                width:100%; box-sizing:border-box; border:1px solid #e7e3dd; border-radius:8px;
+                padding:9px 10px; font-size:13.5px; font-family:inherit;
+            }
+            .ob-location-btn-row{ margin-bottom:12px; text-align:left; }
+            .onboarding-note{ font-size:11.5px; color:#888; margin:12px 0 0; }
+        }
     </style>
 </head>
 <body>
     <div id="app-splash" class="app-splash" aria-hidden="true">
         <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="" class="app-splash-logo">
     </div>
+    {% if needs_onboarding %}
+    <div id="app-onboarding" class="app-onboarding" aria-hidden="true">
+        <div class="onboarding-card">
+            <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="" class="onboarding-logo">
+            <h2>Welcome to Samaa</h2>
+            <p class="onboarding-hint">Set your location and default calendar to get started.</p>
+
+            <div class="ob-location-btn-row">
+                <button type="button" id="ob-use-location" class="use-location-btn">
+                    <span aria-hidden="true">&#128205;</span> Use my current location
+                </button>
+                <div id="ob-geo-status" class="note" style="display:none;margin-top:8px;"></div>
+            </div>
+
+            <div class="field">
+                <label for="ob-location-name">Location name</label>
+                <input type="text" id="ob-location-name" required>
+            </div>
+            <input type="hidden" id="ob-lat">
+            <input type="hidden" id="ob-lng">
+            <input type="hidden" id="ob-tz">
+
+            <div class="field">
+                <label for="ob-default-cal">Default calendar</label>
+                <select id="ob-default-cal">
+                    <option value="hijri">Bohra (Fatimid) Hijri</option>
+                    <option value="sunni">Sunni (Umm al-Qura) Hijri</option>
+                    <option value="shia">Shia (Jafari) Hijri</option>
+                    <option value="gregorian">Gregorian</option>
+                    <option value="hebrew">Hebrew</option>
+                    <option value="parsi">Parsi (Shahenshahi)</option>
+                    <option value="hindu">Hindu (Lunar)</option>
+                </select>
+            </div>
+
+            <button type="button" id="ob-submit" class="btn-save" style="width:100%;margin-top:10px;">Continue</button>
+            <p class="onboarding-note">You can change your location or default calendar anytime in Settings.</p>
+        </div>
+    </div>
+    {% endif %}
     <script>
         // Runs before the rest of the page paints, so the splash is the
         // first thing visible on mobile with no flash-of-content. Gated
@@ -500,6 +573,83 @@
         }
         header.addEventListener('pointerup', endDrag);
         header.addEventListener('pointercancel', endDrag);
+    })();
+
+    // ---- First-run onboarding (mobile only) ----
+    (function(){
+        var overlay = document.getElementById('app-onboarding');
+        if (!overlay) return; // needs_onboarding was false server-side -- nothing to gate
+
+        var nameField = document.getElementById('ob-location-name');
+        var latField = document.getElementById('ob-lat');
+        var lngField = document.getElementById('ob-lng');
+        var tzField = document.getElementById('ob-tz');
+        var geoBtn = document.getElementById('ob-use-location');
+        var geoStatus = document.getElementById('ob-geo-status');
+        var submitBtn = document.getElementById('ob-submit');
+
+        function setMsg(msg, isError){
+            geoStatus.style.display = 'block';
+            geoStatus.textContent = msg;
+            geoStatus.style.color = isError ? '#b5121b' : '#666';
+        }
+
+        geoBtn.addEventListener('click', function(){
+            if (!('geolocation' in navigator)) {
+                setMsg('Location detection not supported -- enter your city name and hit Continue.', true);
+                return;
+            }
+            setMsg('Getting your location...', false);
+            geoBtn.disabled = true;
+            navigator.geolocation.getCurrentPosition(function(pos){
+                var lat = pos.coords.latitude, lng = pos.coords.longitude;
+                latField.value = lat.toFixed(6);
+                lngField.value = lng.toFixed(6);
+                tzField.value = -(new Date().getTimezoneOffset()) / 60;
+                fetch('/api/tz-offset?lat=' + lat + '&lng=' + lng)
+                    .then(function(r){ return r.json(); })
+                    .then(function(d){ if (d && typeof d.offset === 'number') tzField.value = d.offset; })
+                    .catch(function(){});
+                fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=' + lat + '&lon=' + lng + '&zoom=10')
+                    .then(function(r){ return r.json(); })
+                    .then(function(data){
+                        var addr = (data && data.address) || {};
+                        var place = addr.city || addr.town || addr.village || addr.state || '';
+                        if (place) nameField.value = place + (addr.country ? ', ' + addr.country : '');
+                        setMsg('Location filled in.', false);
+                    })
+                    .catch(function(){ setMsg('Coordinates filled in -- type a name in manually.', false); })
+                    .finally(function(){ geoBtn.disabled = false; });
+            }, function(err){
+                geoBtn.disabled = false;
+                setMsg('Could not get your location -- type your city name and hit Continue.', true);
+            }, { enableHighAccuracy: false, timeout: 10000 });
+        });
+
+        submitBtn.addEventListener('click', function(){
+            if (!nameField.value.trim()) {
+                setMsg('Enter a location name first.', true);
+                return;
+            }
+            // Fallback if geolocation was never used/granted: send Mumbai
+            // (matches DEFAULT_LOCATION in main.py) rather than block
+            // submission on a permission the user may have denied.
+            var body = new URLSearchParams({
+                location_name: nameField.value.trim(),
+                lat: latField.value || '19.076',
+                lng: lngField.value || '72.877',
+                tz_offset: tzField.value || '5.5',
+                default_calendar: document.getElementById('ob-default-cal').value,
+            });
+            submitBtn.disabled = true;
+            fetch('/onboarding', { method: 'POST', body: body })
+                .then(function(r){ if (!r.ok) throw new Error(); return r.json(); })
+                .then(function(){ window.location.reload(); })
+                .catch(function(){
+                    setMsg('Something went wrong -- try again.', true);
+                    submitBtn.disabled = false;
+                });
+        });
     })();
     </script>
 </body>
