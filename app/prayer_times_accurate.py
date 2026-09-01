@@ -93,9 +93,9 @@ def asr_time(jd: float, lat: float, lng: float, shadow_factor: float = 1.0) -> f
     
     noon_utc = 12.0 - lng / 15.0 - eqt
     
-    # Shadow length = object height * shadow_factor
-    # When sun altitude = arctan(1/shadow_factor)
-    altitude_rad = math.atan(1.0 / shadow_factor)
+    # Shadow length = object height * shadow_factor.
+    # Use the standard mathematical tangent/arc-tangent functions.
+    altitude_rad = math.atan(1.0 / (shadow_factor + math.tan(abs(lat_r - dec_r))))
     
     cosH = (math.sin(altitude_rad) - math.sin(lat_r) * math.sin(dec_r)) / (
         math.cos(lat_r) * math.cos(dec_r)

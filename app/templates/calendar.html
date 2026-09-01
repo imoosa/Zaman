@@ -637,36 +637,45 @@
 </script>
 <script>
 (function () {
+    // Android native bridge detection across all possible interface names
+    var bridge = window.zamaanAndroid || window.ZamanAndroid || window.zamanAndroid ||
+                 window.SamaaAndroid || window.samaaAndroid ||
+                 window.Android || window.androidBridge;
 
-    // Android native bridge is only available inside the Samaa app.
-    if (!window.SamaaAndroid) {
-        console.log("Samaa Android bridge not available");
+    if (!bridge) {
+        console.log("Android bridge not available in this view context");
         return;
     }
 
-    {% if cal in ['hijri', 'sunni', 'shia'] and prayer and prayer.fajr %}
-
+    {% if prayer %}
     // ---------------------------------------------------------
-    // REAL FAJR NOTIFICATION
+    // SCHEDULE ALL DAILY PRAYER NOTIFICATIONS ON ANDROID
     // ---------------------------------------------------------
-
     var prayerDate = "{{ prayer.date }}";
-    var fajrTime = "{{ prayer.fajr }}";
+    var prayers = [
+        { name: "Fajr", time: "{{ prayer.fajr }}", body: "Fajr time has started.", id: 1001 },
+        { name: "Sunrise", time: "{{ prayer.sunrise }}", body: "Sunrise time.", id: 1002 },
+        { name: "Zuhr", time: "{{ prayer.zawal or prayer.dhuhr }}", body: "Zuhr time has started.", id: 1003 },
+        { name: "Asr", time: "{{ prayer.asr }}", body: "Asr time has started.", id: 1004 },
+        { name: "Maghrib", time: "{{ prayer.sunset or prayer.maghrib }}", body: "Maghrib time has started.", id: 1005 },
+        { name: "Isha", time: "{{ prayer.isha }}", body: "Isha time has started.", id: 1006 }
+    ];
 
-    console.log(
-        "Samaa Fajr:",
-        prayerDate,
-        fajrTime
-    );
-
-    SamaaAndroid.schedulePrayerNotification(
-        prayerDate,
-        fajrTime,
-        "Fajr",
-        "Fajr time has started.",
-        1001
-    );
-
+    prayers.forEach(function (p) {
+        if (p.time && p.time !== "--:--") {
+            try {
+                if (typeof bridge.schedulePrayerNotification === 'function') {
+                    bridge.schedulePrayerNotification(prayerDate, p.time, p.name, p.body, p.id);
+                } else if (typeof bridge.scheduleNotification === 'function') {
+                    bridge.scheduleNotification(prayerDate, p.time, p.name, p.body, p.id);
+                } else if (typeof bridge.schedulePrayer === 'function') {
+                    bridge.schedulePrayer(prayerDate, p.time, p.name, p.body, p.id);
+                }
+            } catch (e) {
+                console.error("Error scheduling " + p.name + " via Android bridge:", e);
+            }
+        }
+    });
     {% endif %}
 
 })();

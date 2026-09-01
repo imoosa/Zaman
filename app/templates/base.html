@@ -41,6 +41,17 @@
         }
         body.nav-bottom-fixed .topbar > .brand{ display:none; }
 
+        /* Sound reminders master toggle -- localStorage-scoped to this
+           browser, per settings.html's own description of it. Muted state
+           just dims/slashes the bell; actual mute logic lives in JS. */
+        .sound-toggle-btn{
+            border:none; background:none; cursor:pointer; color:#666;
+            padding:6px; border-radius:8px; display:inline-flex; align-items:center;
+            margin-left:6px;
+        }
+        .sound-toggle-btn:hover{ background:#f4f1ea; }
+        .sound-toggle-btn.muted{ color:#b5121b; }
+
         /* Hard gate: nav-bottom-fixed comes from a runtime layout check
            (applyMobileNavOffset() below), which is one resize/paint race
            away from being wrong -- the screenshot was exactly that: the
@@ -167,7 +178,7 @@
     <div id="app-onboarding" class="app-onboarding" aria-hidden="true">
         <div class="onboarding-card">
             <img src="{{ url_for('static', filename='icons/zaman_logo_bg.png') }}" alt="" class="onboarding-logo">
-            <h2>Welcome to Samaa</h2>
+            <h2>Welcome to Zamaan</h2>
             <p class="onboarding-hint">Set your location and default calendar to get started.</p>
 
             <div class="ob-location-btn-row">
@@ -230,6 +241,9 @@
             </a>
         </span>
         <span class="liturgical-badge" title="Christian liturgical season, sets today's accent color"><span class="dot"></span>{{ liturgical_season_name }}</span>
+        <button type="button" id="sound-reminders-toggle" class="sound-toggle-btn" title="Sound reminders (this browser)" aria-label="Toggle sound reminders">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 01-3.46 0"></path></svg>
+        </button>
         <nav class="menu">
             <a href="{{ url_for('today_view') }}" class="{{ 'active' if active == 'today' else '' }}">
                 <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"></path></svg>
@@ -650,6 +664,123 @@
                     submitBtn.disabled = false;
                 });
         });
+    })();
+
+    // ---- Sound reminders: ringtone playback + azaan/birthday polling ----
+    (function(){
+        var RINGTONE_OPTIONS = {{ ringtone_options | tojson }};
+        var MUTE_KEY = 'sound-reminders-muted';
+        var toggleBtn = document.getElementById('sound-reminders-toggle');
+
+        function isMuted(){ return localStorage.getItem(MUTE_KEY) === '1'; }
+        function applyToggleState(){
+            if (toggleBtn) toggleBtn.classList.toggle('muted', isMuted());
+        }
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', function(){
+                localStorage.setItem(MUTE_KEY, isMuted() ? '0' : '1');
+                applyToggleState();
+            });
+            applyToggleState();
+        }
+
+        // "beep" (file: null) is the always-available fallback -- a short
+        // synthesized tone via Web Audio, no file dependency. Everything
+        // else plays its mp3/wav from RINGTONE_OPTIONS[key].file.
+        function playSynthBeep(){
+            try {
+                var Ctx = window.AudioContext || window.webkitAudioContext;
+                var ctx = new Ctx();
+                var osc = ctx.createOscillator();
+                var gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = 880;
+                var t = ctx.currentTime;
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.exponentialRampToValueAtTime(0.35, t + 0.03);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+                osc.start(t);
+                osc.stop(t + 1.0);
+            } catch (e) {
+                // AudioContext unavailable or blocked (e.g. no user
+                // interaction yet on some browsers) -- nothing more we
+                // can do client-side; the Notification (if permitted)
+                // still fires separately.
+            }
+        }
+
+        function playRingtone(key){
+            if (isMuted()) return;
+            var opt = RINGTONE_OPTIONS[key];
+            if (!opt || !opt.file) { playSynthBeep(); return; }
+            var audio = new Audio(opt.file);
+            audio.play().catch(function(){ playSynthBeep(); });
+        }
+        // settings.html's preview buttons call this directly.
+        window.previewRingtone = function(key){ playRingtone(key); };
+
+        function notify(title, body){
+            if (window.Notification && Notification.permission === 'granted') {
+                try { new Notification(title, { body: body || '' }); } catch (e) {}
+            }
+        }
+
+        if (window.Notification && Notification.permission === 'default') {
+            // Ask once, quietly, on first load -- an OS-level notification
+            // is what actually makes an azaan/birthday alert useful; a
+            // synth beep alone only works while this tab is open and heard.
+            Notification.requestPermission();
+        }
+
+        // Prayer keys present in /api/alerts/today's prayer_times payload
+        // that correspond to a namaz time (excludes sunrise/dhuhr/zuhr_end,
+        // which duplicate zawal/sunset or aren't azaan moments themselves).
+        var PRAYER_KEYS = ['fajr', 'zawal', 'asr', 'sunset', 'isha'];
+        var PRAYER_LABELS = { fajr: 'Fajr', zawal: 'Zuhr', asr: 'Asr', sunset: 'Maghrib', isha: 'Isha' };
+
+        var fired = {};       // fireKey -> true, reset when the date rolls over
+        var firedDate = null;
+
+        function hhmmNow(){
+            var d = new Date();
+            return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+        }
+
+        function checkAlerts(){
+            if (isMuted()) return;
+            fetch('/api/alerts/today').then(function(r){ return r.json(); }).then(function(data){
+                if (firedDate !== data.date) { fired = {}; firedDate = data.date; }
+                var now = hhmmNow();
+
+                if (data.prefs.alert_azaan && data.prefs.is_hijri_family) {
+                    PRAYER_KEYS.forEach(function(pk){
+                        var t = data.prayer_times[pk];
+                        var fireKey = 'azaan-' + pk + '-' + t;
+                        if (t && t === now && !fired[fireKey]) {
+                            fired[fireKey] = true;
+                            playSynthBeep();
+                            notify('Azaan -- ' + PRAYER_LABELS[pk], t);
+                        }
+                    });
+                }
+
+                if (data.prefs.alert_birthday_anniversary) {
+                    data.personal_events.forEach(function(ev){
+                        var fireKey = 'personal-' + ev.id + '-' + data.date;
+                        if (fired[fireKey]) return;
+                        fired[fireKey] = true;
+                        var key = ev.ringtone ||
+                            (ev.category === 'anniversary' ? data.prefs.anniversary_ringtone : data.prefs.birthday_ringtone);
+                        playRingtone(key);
+                        notify(ev.title, ev.description || '');
+                    });
+                }
+            }).catch(function(){ /* network hiccup -- retried on the next interval */ });
+        }
+
+        checkAlerts();
+        setInterval(checkAlerts, 60000);
     })();
     </script>
 </body>

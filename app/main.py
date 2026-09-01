@@ -1716,8 +1716,8 @@ def create_app():
                 raw_hd = request.form.get("hijri_day")
                 raw_gd = request.form.get("gregorian_date")
 
-                g = date.fromisoformat(raw_gd) if raw_gd else None
-                derived = hc.gregorian_to_hijri(g) if g else None  # (year, month, day)
+                gdate = date.fromisoformat(raw_gd) if raw_gd else None
+                derived = hc.gregorian_to_hijri(gdate) if gdate else None  # (year, month, day)
 
                 hijri_month = int(raw_hm) if raw_hm else (derived[1] if derived else None)
                 hijri_day = int(raw_hd) if raw_hd else (derived[2] if derived else None)
@@ -1749,7 +1749,7 @@ def create_app():
                     is_custom=True,
                     repeat=repeat,
                     hijri_year=hijri_year,
-                    gregorian_date=g,
+                    gregorian_date=gdate,
                 )
                 db.add(e)
                 db.commit()
